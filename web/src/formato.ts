@@ -47,6 +47,21 @@ export function litros(ml: number): string {
   return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(ml / 1000);
 }
 
+/** 1.55 → "1,55"; com `casas`, fixa as casas decimais (0.5 → "0,50"). */
+export function decimal(n: number, casas?: number): string {
+  return new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: casas ?? 0,
+    maximumFractionDigits: casas ?? 2,
+  }).format(n);
+}
+
+/** De onde veio a meta, do jeito que o usuário fala. */
+export function rotuloOrigem(origem: string | undefined): string {
+  if (origem === "profissional") return "seu nutricionista";
+  if (origem === "coach") return "ajuste do coach";
+  return "fórmula";
+}
+
 export function porcento(valor: number, meta: number): number {
   if (!meta || meta <= 0) return 0;
   return Math.max(0, Math.min(100, (valor / meta) * 100));

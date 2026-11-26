@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes, useNavigate } from "react-router";
 import { definirNavegacao } from "./api";
 import Shell, { EmBreve, TelaCoach } from "./layout/Shell";
 import Cadastro from "./pages/Cadastro";
+import Comida from "./pages/Comida";
 import Entrar from "./pages/Entrar";
 import Hoje from "./pages/Hoje";
 import Perfil from "./pages/Perfil";
@@ -26,7 +27,7 @@ function App() {
         <Route element={<Shell />}>
           <Route index element={<Hoje />} />
           <Route path="perfil" element={<Perfil />} />
-          <Route path="comida" element={<EmBreve titulo="Comida" etapa="Foto, código de barras e busca na TACO chegam na etapa 2." />} />
+          <Route path="comida" element={<Comida />} />
           <Route path="treino" element={<EmBreve titulo="Treino" etapa="Plano semanal e registro de séries chegam na etapa 3." />} />
           <Route path="progresso" element={<EmBreve titulo="Progresso" etapa="Peso, streak e histórico chegam na etapa 6." />} />
           <Route path="coach" element={<TelaCoach />} />

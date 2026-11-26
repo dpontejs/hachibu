@@ -75,3 +75,67 @@ describe("api", () => {
     await expect(api.getPerfil()).resolves.toBeNull();
   });
 });
+
+describe("422 em pt-BR", () => {
+  it("traduz os tipos de erro do pydantic", async () => {
+    prepara(422, {
+      detail: [
+        {
+          loc: ["body", "altura_cm"],
+          msg: "Input should be greater than or equal to 120",
+          type: "greater_than_equal",
+          ctx: { ge: 120 },
+        },
+        {
+          loc: ["body", "peso_kg"],
+          msg: "Input should be less than or equal to 250",
+          type: "less_than_equal",
+          ctx: { le: 250 },
+        },
+        {
+          loc: ["body", "nome"],
+          msg: "String should have at least 1 character",
+          type: "string_too_short",
+          ctx: { min_length: 1 },
+        },
+        { loc: ["body", "sexo"], msg: "Input should be 'M' or 'F'", type: "literal_error", ctx: { expected: "'M' or 'F'" } },
+        { loc: ["body", "itens", 0, "alimento_id"], msg: "Value error, alimento inexistente", type: "value_error" },
+        { loc: ["body", "outro"], msg: "Field required", type: "missing" },
+      ],
+    });
+    const erro = (await api.addAgua(0).catch((e) => e)) as ApiError;
+    expect(erro.campos).toEqual({
+      altura_cm: "mínimo 120",
+      peso_kg: "máximo 250",
+      nome: "muito curto",
+      sexo: "opção inválida",
+      alimento_id: "alimento inexistente",
+      outro: "Field required",
+    });
+  });
+});
+
+describe("rotas da TACO e do diagnóstico", () => {
+  it("buscarAlimentos codifica a consulta", async () => {
+    const { fetchMock } = prepara(200, []);
+    await api.buscarAlimentos("pão francês");
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/alimentos?q=${encodeURIComponent("pão francês")}`,
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("addRefeicaoTaco manda só alimento_id e gramas", async () => {
+    const { fetchMock } = prepara(201, { id: 1 });
+    await api.addRefeicaoTaco({ nome: "Almoço", itens: [{ alimento_id: 1, gramas: 150 }] });
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/refeicoes");
+    expect(JSON.parse(String(init.body))).toEqual({ nome: "Almoço", itens: [{ alimento_id: 1, gramas: 150 }] });
+  });
+
+  it("diagnostico chama GET /api/diagnostico", async () => {
+    const { fetchMock } = prepara(200, { tmb: 1780 });
+    await expect(api.diagnostico()).resolves.toEqual({ tmb: 1780 });
+    expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toBe("/api/diagnostico");
+  });
+});
