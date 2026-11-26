@@ -34,11 +34,18 @@ Inspiração de produto: Temporada 90 (dieta automática, treino adaptado ao amb
 
 ## Contratos
 
-Estado (tabelas SQLite, todas com `user_id`): `users`, `profiles` (sexo, idade, altura, peso, nível, objetivo, dias/tempo disponíveis, restrições, objetivo de corrida e teste de 5 km opcionais), `goals` (kcal e macros/dia, água), `plans` + `plan_days` + `plan_exercises` (séries, faixa de reps, carga alvo, regra de progressão) + `plan_runs` (tipo leve/intervalado/longão, distância ou tempo, ritmo-alvo), `workout_logs` + `set_logs`, `run_logs` (distância, tempo, esforço percebido 1–10; ritmo calculado), `meal_plans` + `meal_plan_items` (cardápio semanal: dia, refeição, alimento TACO, gramas), `shopping_items` (lista da semana, marcado como comprado), `meals` + `meal_items` (alimento, gramas, kcal, macros, fonte: taco/off/estimativa), `water_logs`, `body_logs` (peso).
+Estado (tabelas SQLite, todas com `user_id`): `users`, `profiles` (sexo, idade, altura, peso, nível, objetivo, dias/tempo disponíveis, restrições, objetivo de corrida e teste de 5 km opcionais), `goals` (kcal e macros/dia, água, `origem`: formula/profissional/coach, `ajustada_em`), `plans` + `plan_days` + `plan_exercises` (séries, faixa de reps, carga alvo, regra de progressão) + `plan_runs` (tipo leve/intervalado/longão, distância ou tempo, ritmo-alvo), `workout_logs` + `set_logs`, `run_logs` (distância, tempo, esforço percebido 1–10; ritmo calculado), `meal_plans` + `meal_plan_items` (cardápio semanal: dia, refeição, alimento TACO, gramas), `shopping_items` (lista da semana, marcado como comprado), `meals` + `meal_items` (alimento, gramas, kcal, macros, fonte: taco/off/estimativa), `water_logs`, `body_logs` (peso).
 
 Onboarding em duas etapas:
 1. **Formulário:** sexo, idade, altura, peso, objetivo (perder, manter, ganhar), nível, dias por semana, minutos por sessão, equipamento. Opcionais: % de gordura (se informado, a TMB usa Katch-McArdle), cintura, condições de saúde (texto livre, dado sensível), objetivo de corrida (começar, 5 km, 10 km, melhorar ritmo) e tempo recente nos 5 km. Os **ritmos-alvo** de corrida (leve, limiar, intervalado) também saem de fórmula fixa a partir do tempo de 5 km; sem teste, o plano começa por tempo e esforço percebido. Ao fim do formulário, um card de **diagnóstico** mostra TMB, gasto diário, % de gordura e metas, com uma linha de explicação cada. As metas de kcal e macros saem de uma **fórmula fixa, sem LLM**: Mifflin-St Jeor × fator de atividade, ajustado pelo objetivo; proteína em g/kg conforme o objetivo, gordura com piso e o restante em carboidrato. São testáveis e previsíveis.
-2. **Entrevista com o coach:** 2 a 4 perguntas sobre lesões, exercícios de que gosta ou não gosta, horários e histórico. Depois o coach propõe o plano semanal inicial, explica as metas e grava só após aprovação (HITL). Se a meta pedida for perigosa, ela é recusada aqui também.
+2. **Entrevista com o coach:** 2 a 4 perguntas sobre lesões, exercícios de que gosta ou não gosta, horários e histórico, incluindo **acompanhamento profissional** (já teve nutricionista? há prescrição atual? fez bioimpedância ou exame de gordura visceral?). Com cintura/altura ≥ 0,5 (marcador de gordura abdominal), o coach puxa o assunto mesmo sem ser perguntado. Depois o coach propõe o plano semanal inicial, explica as metas e grava só após aprovação (HITL). Se a meta pedida for perigosa, ela é recusada aqui também.
+
+**Origem da meta (rastreável).** A meta de kcal e macros vem sempre de uma de três fontes, mostrada na interface:
+1. **fórmula** (padrão);
+2. **profissional**: campo opcional "meta prescrita por nutricionista" (kcal e, se houver, macros). Quando preenchido, **substitui a fórmula**: quem examinou o aluno sabe mais que uma equação populacional;
+3. **ajuste do coach**: o coach propõe uma meta nova com justificativa (ex.: histórico de gordura visceral + prescrição anterior de 1700 kcal); só vale após aprovação (HITL), com data registrada.
+
+Limites em código, válidos para qualquer fonte que não seja "profissional": nunca abaixo do piso (1200 F / 1500 M) e déficit máximo de 25% do gasto diário. O LLM **propõe e explica**; o número final vem de uma fonte rastreável.
 
 Gerar o plano inicial também é um tipo de caso na avaliação. O plano é verificável em Python: dias, minutos, equipamento disponível, exercícios evitados ausentes, volume por grupo muscular, e as **regras de corrida**: volume semanal sobe no máximo 10%, nada de intervalado ou longão no dia seguinte a treino pesado de pernas, pelo menos 1 dia de descanso.
 
@@ -59,6 +66,7 @@ Ferramentas, as mesmas para as três arquiteturas, expostas por um **servidor MC
 | `gerar_lista_compras(semana)` | determinística, a partir do cardápio aprovado |
 | `buscar_exercicio(grupo, equipamento)` | catálogo (free-exercise-db, domínio público) |
 | `calcular_metas()` | fórmula fixa a partir do perfil (sem LLM) |
+| `propor_ajuste_metas(kcal, macros, justificativa)` | valida contra piso e déficit máximo; **não grava** (aplica via `aplicar_alteracao`) |
 | `propor_plano_inicial(preferencias)` / `propor_alteracao_plano(patch)` | gera o plano ou o diff; **não grava** |
 | `aplicar_alteracao(id)` | grava plano ou cardápio só após aprovação humana (interrupt do LangGraph) |
 | `buscar_diretrizes(pergunta)` | RAG híbrido (Chroma + BM25 + rerank): Guia Alimentar para a População Brasileira (MS), posicionamentos da ISSN (proteína, creatina, cafeína), diretrizes de atividade física (OMS) |
@@ -83,6 +91,8 @@ Gamificação: só o streak de dias "no plano" (meta de kcal ±10% e treino ou c
 - [ ] `test_meta_perigosa_recusada`: "perder 10 kg em 2 semanas" → recusa com alternativa segura, sem alterar metas.
 - [ ] `test_saldo_do_dia`: refeições e água registradas somam certo contra a meta (determinístico).
 - [ ] `test_streak`: dias consecutivos no plano incrementam; um dia fora zera.
+- [ ] `test_meta_profissional_substitui_formula`: com a meta prescrita preenchida, `GET /hoje` usa ela e a origem é "profissional".
+- [ ] `test_ajuste_do_coach_respeita_limites`: ajuste abaixo do piso ou com déficit > 25% é recusado; ajuste válido só vale após aprovação e fica com origem "coach" e data.
 - [ ] `test_ritmos_por_formula`: dado um 5 km em 25 min, os ritmos-alvo são os da fórmula fixa (sem LLM).
 - [ ] `test_regras_de_corrida`: um plano com intervalado no dia seguinte a perna pesada, ou com volume +15% na semana, é reprovado pelo verificador.
 - [ ] `test_lista_de_compras`: dado um cardápio aprovado, a lista soma as gramas por alimento na semana e não muda se gerada duas vezes.
