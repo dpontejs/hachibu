@@ -1,0 +1,209 @@
+// Cliente da API do Hachibu. Uma função tipada por rota (contrato: plano
+// 2026-11-26-estrutura-inicial, Tasks 3–5). Toda chamada leva o cookie de sessão.
+//
+// Regras globais:
+// - 401 fora do login → vai para /entrar.
+// - 409 {"detail":"perfil_incompleto"} → vai para /perfil.
+// - 422 → ApiError com `campos` (campo → mensagem) para o formulário mostrar.
+
+export type Sexo = "M" | "F";
+export type Objetivo = "perder" | "manter" | "ganhar";
+export type Nivel = "iniciante" | "intermediario" | "avancado";
+export type Equipamento = "academia" | "casa_halteres" | "peso_corporal";
+
+export interface Perfil {
+  sexo: Sexo;
+  idade: number;
+  altura_cm: number;
+  peso_kg: number;
+  objetivo: Objetivo;
+  nivel: Nivel;
+  dias_semana: number;
+  minutos_sessao: number;
+  equipamento: Equipamento;
+  percentual_gordura?: number | null;
+  cintura_cm?: number | null;
+  condicoes_saude?: string | null;
+}
+
+export interface Metas {
+  kcal: number;
+  proteina_g: number;
+  carbo_g: number;
+  gordura_g: number;
+  agua_ml: number;
+}
+
+export interface PerfilComMetas {
+  perfil: Perfil;
+  metas: Metas;
+}
+
+export interface Me {
+  email: string;
+  perfil_completo: boolean;
+}
+
+export interface Consumido {
+  kcal: number;
+  proteina_g: number;
+  carbo_g: number;
+  gordura_g: number;
+}
+
+export interface RefeicaoResumo {
+  id: number;
+  nome: string;
+  kcal: number;
+  criado_em: string;
+}
+
+export interface Hoje {
+  data: string; // AAAA-MM-DD, já no fuso de Brasília
+  metas: Metas;
+  consumido: Consumido;
+  agua_ml: number;
+  refeicoes: RefeicaoResumo[];
+}
+
+export interface RefeicaoIn {
+  nome: string;
+  kcal: number;
+  proteina_g: number;
+  carbo_g: number;
+  gordura_g: number;
+}
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly detail: unknown;
+  /** Para 422: campo do corpo → primeira mensagem de erro. */
+  readonly campos: Record<string, string>;
+
+  constructor(status: number, detail: unknown) {
+    super(typeof detail === "string" ? detail : `HTTP ${status}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.detail = detail;
+    this.campos = status === 422 ? extrairCampos(detail) : {};
+  }
+}
+
+/** Lançado depois de redirecionar (401/409); quem chamou só precisa parar. */
+export class Redirecionado extends Error {
+  readonly para: string;
+  constructor(para: string) {
+    super(`redirecionado para ${para}`);
+    this.name = "Redirecionado";
+    this.para = para;
+  }
+}
+
+type Navegar = (para: string) => void;
+
+let navegar: Navegar = (para) => {
+  if (window.location.pathname !== para) window.location.assign(para);
+};
+
+/** O app registra o `navigate` do react-router para redirecionar sem recarregar. */
+export function definirNavegacao(fn: Navegar): void {
+  navegar = fn;
+}
+
+function extrairCampos(detail: unknown): Record<string, string> {
+  const campos: Record<string, string> = {};
+  if (!Array.isArray(detail)) return campos;
+  for (const erro of detail) {
+    if (!erro || typeof erro !== "object") continue;
+    const { loc, msg } = erro as { loc?: unknown; msg?: unknown };
+    if (!Array.isArray(loc) || typeof msg !== "string") continue;
+    const campo = String(loc[loc.length - 1] ?? "");
+    if (campo && !(campo in campos)) campos[campo] = msg;
+  }
+  return campos;
+}
+
+interface Opcoes {
+  /** No login, 401 é "senha errada", não "sessão expirada". */
+  sem401Redirect?: boolean;
+}
+
+async function request<T>(
+  method: string,
+  caminho: string,
+  corpo?: unknown,
+  opcoes: Opcoes = {},
+): Promise<T> {
+  const init: RequestInit = { method, credentials: "include", headers: {} };
+  if (corpo !== undefined) {
+    init.headers = { "Content-Type": "application/json" };
+    init.body = JSON.stringify(corpo);
+  }
+  const resp = await fetch(`/api${caminho}`, init);
+
+  if (resp.status === 204) return undefined as T;
+
+  let dados: unknown = null;
+  const texto = await resp.text();
+  if (texto) {
+    try {
+      dados = JSON.parse(texto);
+    } catch {
+      dados = texto;
+    }
+  }
+
+  if (resp.ok) return dados as T;
+
+  const detail =
+    dados && typeof dados === "object" && "detail" in dados
+      ? (dados as { detail: unknown }).detail
+      : dados;
+
+  if (resp.status === 401 && !opcoes.sem401Redirect) {
+    navegar("/entrar");
+    throw new Redirecionado("/entrar");
+  }
+  if (resp.status === 409 && detail === "perfil_incompleto") {
+    navegar("/perfil");
+    throw new Redirecionado("/perfil");
+  }
+  throw new ApiError(resp.status, detail);
+}
+
+export const api = {
+  signup: (email: string, senha: string, convite: string) =>
+    request<unknown>("POST", "/auth/signup", { email, senha, convite }, { sem401Redirect: true }),
+  login: (email: string, senha: string) =>
+    request<unknown>("POST", "/auth/login", { email, senha }, { sem401Redirect: true }),
+  logout: () => request<void>("POST", "/auth/logout"),
+  me: () => request<Me>("GET", "/me"),
+  /** `null` quando ainda não há perfil (404). */
+  async getPerfil(): Promise<{ perfil: Perfil; metas: Metas | null } | null> {
+    try {
+      const dados = await request<PerfilComMetas | Perfil>("GET", "/perfil");
+      // O contrato só fixa 200/404; aceita `{perfil, metas}` ou o perfil puro.
+      if (dados && "perfil" in dados) return dados;
+      return { perfil: dados, metas: null };
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) return null;
+      throw e;
+    }
+  },
+  putPerfil: (perfil: Perfil) => request<PerfilComMetas>("PUT", "/perfil", perfil),
+  hoje: () => request<Hoje>("GET", "/hoje"),
+  addRefeicao: (r: RefeicaoIn) => request<unknown>("POST", "/refeicoes", r),
+  addAgua: (ml: number) => request<unknown>("POST", "/agua", { ml }),
+};
+
+/** Mensagem curta para mostrar ao usuário; `null` se foi só um redirecionamento. */
+export function mensagemDeErro(e: unknown): string | null {
+  if (e instanceof Redirecionado) return null;
+  if (e instanceof ApiError) {
+    if (e.status === 422) return "Confira os campos destacados.";
+    if (e.status === 429) return "Muitas tentativas. Espere alguns minutos.";
+    if (e.status >= 500) return "O servidor tropeçou. Tente de novo.";
+    return typeof e.detail === "string" ? e.detail : e.message;
+  }
+  return "Sem conexão com o servidor.";
+}
