@@ -123,7 +123,7 @@ export default function Hoje() {
       <section className="card card--agua" aria-labelledby="agua-titulo">
         <div className="linha">
           <h2 id="agua-titulo" className="rotulo px">
-            ÁGUA
+            AGUA
           </h2>
           <span className="vt valor-num">
             {litros(dados.agua_ml)} / {litros(metas.agua_ml)} L
@@ -151,7 +151,7 @@ export default function Hoje() {
       <section className="refeicoes" aria-labelledby="refeicoes-titulo">
         <div className="linha">
           <h2 id="refeicoes-titulo" className="rotulo px">
-            REFEIÇÕES
+            REFEICOES
           </h2>
           <span className="vt mudo meta-num">{dados.refeicoes.length}</span>
         </div>

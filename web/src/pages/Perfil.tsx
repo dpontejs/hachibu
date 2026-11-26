@@ -409,7 +409,7 @@ function PainelMetas({ metas, destaque }: { metas: Metas; destaque: boolean }) {
           <dd className="vt">{metas.gordura_g}g</dd>
         </div>
         <div style={{ color: "var(--agua)" }}>
-          <dt className="px">ÁGUA</dt>
+          <dt className="px">AGUA</dt>
           <dd className="vt">{litros(metas.agua_ml)} L</dd>
         </div>
       </dl>

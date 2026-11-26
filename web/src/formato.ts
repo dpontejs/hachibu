@@ -3,7 +3,7 @@
 
 export const FUSO = "America/Sao_Paulo";
 
-const DIAS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
+const DIAS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB"];
 const MESES = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
 
 /** "2026-11-26" → "QUI · 26 NOV". A data já vem no fuso certo; não converte. */

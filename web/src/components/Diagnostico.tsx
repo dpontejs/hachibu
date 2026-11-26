@@ -53,7 +53,7 @@ export default function Diagnostico({ dados }: { dados: DadosDiagnostico }) {
     <section className="diag" aria-labelledby="diag-titulo">
       <div className="linha">
         <h2 id="diag-titulo" className="rotulo px">
-          DIAGNÓSTICO
+          DIAGNOSTICO
         </h2>
         <span className="diag__sub mudo">de onde vêm os números</span>
       </div>
