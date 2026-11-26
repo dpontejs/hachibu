@@ -71,3 +71,12 @@ def test_perfil_isolado_por_usuario(make_user):
     a, b = make_user("a@x.com"), make_user("b@x.com")
     a.put("/api/perfil", json=BASE)
     assert b.get("/api/perfil").status_code == 404
+
+
+def test_perfis_em_paralelo_nao_quebram_transacao(make_user):
+    from concurrent.futures import ThreadPoolExecutor
+
+    clientes = [make_user(f"u{i}@x.com") for i in range(8)]
+    with ThreadPoolExecutor(8) as ex:
+        status = list(ex.map(lambda c: c.put("/api/perfil", json=BASE).status_code, clientes * 5))
+    assert set(status) == {200}

@@ -1,8 +1,9 @@
 """Rotas do perfil: gravar o perfil recalcula e grava as metas."""
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException
 
 from hachibu.auth import UserId
+from hachibu.db import Db
 from hachibu.metas import Metas, PerfilIn, calcular_metas
 
 router = APIRouter(prefix="/api")
@@ -18,8 +19,7 @@ def ler_metas(db, user_id: int) -> Metas | None:
 
 
 @router.put("/perfil")
-def salvar_perfil(perfil: PerfilIn, user_id: UserId, request: Request) -> dict:
-    db = request.app.state.db
+def salvar_perfil(perfil: PerfilIn, user_id: UserId, db: Db) -> dict:
     metas = calcular_metas(perfil)
     colunas = ", ".join(CAMPOS)
     marcadores = ", ".join("?" for _ in CAMPOS)
@@ -42,8 +42,7 @@ def salvar_perfil(perfil: PerfilIn, user_id: UserId, request: Request) -> dict:
 
 
 @router.get("/perfil")
-def obter_perfil(user_id: UserId, request: Request) -> dict:
-    db = request.app.state.db
+def obter_perfil(user_id: UserId, db: Db) -> dict:
     row = db.execute(f"SELECT {', '.join(CAMPOS)} FROM profiles WHERE user_id = ?", (user_id,)).fetchone()
     if row is None:
         raise HTTPException(404, "perfil_inexistente")

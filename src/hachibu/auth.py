@@ -15,6 +15,7 @@ from itsdangerous import BadSignature, TimestampSigner
 from pydantic import BaseModel, Field, field_validator
 
 from hachibu.config import Settings
+from hachibu.db import Db
 
 COOKIE_NAME = "hachibu_session"
 SESSION_MAX_AGE = 90 * 24 * 3600
@@ -96,7 +97,7 @@ def _abrir_sessao(response: Response, settings: Settings, user_id: int) -> None:
     )
 
 
-def current_user(request: Request) -> int:
+def current_user(request: Request, db: Db) -> int:
     """Dependência: o id do usuário da sessão, ou 401."""
     token = request.cookies.get(COOKIE_NAME)
     if not token:
@@ -105,7 +106,7 @@ def current_user(request: Request) -> int:
         user_id = int(_signer(request.app.state.settings).unsign(token, max_age=SESSION_MAX_AGE).decode())
     except (BadSignature, ValueError):
         raise HTTPException(401, "nao_autenticado") from None
-    existe = request.app.state.db.execute("SELECT 1 FROM users WHERE id = ?", (user_id,)).fetchone()
+    existe = db.execute("SELECT 1 FROM users WHERE id = ?", (user_id,)).fetchone()
     if not existe:
         raise HTTPException(401, "nao_autenticado")
     return user_id
@@ -115,7 +116,7 @@ UserId = Annotated[int, Depends(current_user)]
 
 
 @router.post("/auth/signup", status_code=201)
-def signup(dados: SignupIn, request: Request, response: Response) -> dict:
+def signup(dados: SignupIn, request: Request, response: Response, db: Db) -> dict:
     settings: Settings = request.app.state.settings
     limiter: LoginLimiter = request.app.state.login_limiter
     ip, agora = _ip(request), datetime.now(UTC)
@@ -124,7 +125,6 @@ def signup(dados: SignupIn, request: Request, response: Response) -> dict:
     if not hmac.compare_digest(dados.convite.encode(), settings.invite_code.encode()):
         limiter.falhou(ip, agora)
         raise HTTPException(403, "convite_invalido")
-    db = request.app.state.db
     if db.execute("SELECT 1 FROM users WHERE email = ?", (dados.email,)).fetchone():
         raise HTTPException(409, "email_ja_cadastrado")
     cur = db.execute(
@@ -136,15 +136,13 @@ def signup(dados: SignupIn, request: Request, response: Response) -> dict:
 
 
 @router.post("/auth/login")
-def login(dados: LoginIn, request: Request, response: Response) -> dict:
+def login(dados: LoginIn, request: Request, response: Response, db: Db) -> dict:
     settings: Settings = request.app.state.settings
     limiter: LoginLimiter = request.app.state.login_limiter
     ip, agora = _ip(request), datetime.now(UTC)
     if limiter.bloqueado(ip, agora):
         raise HTTPException(429, "muitas_tentativas")
-    row = request.app.state.db.execute(
-        "SELECT id, senha_hash FROM users WHERE email = ?", (dados.email,)
-    ).fetchone()
+    row = db.execute("SELECT id, senha_hash FROM users WHERE email = ?", (dados.email,)).fetchone()
     try:
         ok = row is not None and _hasher.verify(row["senha_hash"], dados.senha)
     except (VerificationError, InvalidHashError):
@@ -163,8 +161,7 @@ def logout(response: Response) -> None:
 
 
 @router.get("/me")
-def me(user_id: UserId, request: Request) -> dict:
-    db = request.app.state.db
+def me(user_id: UserId, db: Db) -> dict:
     email = db.execute("SELECT email FROM users WHERE id = ?", (user_id,)).fetchone()["email"]
     perfil = db.execute("SELECT 1 FROM profiles WHERE user_id = ?", (user_id,)).fetchone()
     return {"email": email, "perfil_completo": perfil is not None}

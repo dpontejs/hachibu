@@ -1,8 +1,12 @@
 """Conexão SQLite e migrações SQL versionadas (mesmo padrão do app today)."""
 
 import sqlite3
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Annotated
+
+from fastapi import Depends, Request
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
@@ -13,6 +17,7 @@ def connect(path: str) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=5000")
     return conn
 
 
@@ -41,3 +46,15 @@ def migrate(conn: sqlite3.Connection) -> list[str]:
             raise
         aplicadas.append(arquivo.name)
     return aplicadas
+
+
+def get_db(request: Request) -> Iterator[sqlite3.Connection]:
+    """Dependência: uma conexão por requisição. Uma conexão compartilhada entre threads mistura transações."""
+    conn = connect(request.app.state.settings.db_path)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+Db = Annotated[sqlite3.Connection, Depends(get_db)]
