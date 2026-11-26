@@ -22,7 +22,7 @@ CAMPOS = {
 
 
 def numero(valor) -> float:
-    return round(float(valor), 1) if isinstance(valor, int | float) else 0.0
+    return round(float(valor), 2) if isinstance(valor, int | float) else 0.0
 
 
 def main(entrada: str, saida: str) -> None:

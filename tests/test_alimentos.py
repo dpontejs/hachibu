@@ -23,7 +23,7 @@ def test_arroz_integral_cozido_bate_com_a_tabela(tmp_path):
     carregar_taco(conn)
     r = conn.execute("SELECT * FROM foods WHERE id = 1").fetchone()
     assert r["nome"] == "Arroz, integral, cozido"
-    assert (r["kcal"], r["proteina_g"], r["carbo_g"], r["gordura_g"]) == (123.5, 2.6, 25.8, 1.0)
+    assert (r["kcal"], r["proteina_g"], r["carbo_g"], r["gordura_g"]) == (123.53, 2.59, 25.81, 1.0)
     assert r["nome_busca"] == "arroz integral cozido"
 
 
