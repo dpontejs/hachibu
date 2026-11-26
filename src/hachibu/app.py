@@ -17,6 +17,7 @@ def create_app(settings: Settings) -> FastAPI:
     migrate(conn)
     conn.close()
     app.state.login_limiter = auth.LoginLimiter()
+    app.state.signup_limiter = auth.LoginLimiter(max_global=20)
     app.include_router(auth.router)
     app.include_router(perfil.router)
     app.include_router(diario.router)
@@ -40,8 +41,16 @@ def _servir_spa(app: FastAPI, dist: Path) -> None:
             raise HTTPException(404, "Not Found")
         arquivo = (dist / caminho).resolve()
         if caminho and arquivo.is_file() and arquivo.is_relative_to(dist):
-            return FileResponse(arquivo)
-        return FileResponse(index)
+            # Os assets têm hash no nome: podem ficar em cache para sempre.
+            imutavel = caminho.startswith("assets/")
+            cache = "public, max-age=31536000, immutable" if imutavel else "no-cache"
+            return FileResponse(arquivo, headers={"Cache-Control": cache})
+        if caminho.startswith("assets/"):
+            # Asset de um build antigo: 404, nunca o index.html (o navegador recusaria o módulo e o app
+            # ficaria em branco).
+            raise HTTPException(404, "Not Found")
+        # O index sempre revalida, para um deploy novo chegar a quem está com o app aberto.
+        return FileResponse(index, headers={"Cache-Control": "no-cache"})
 
 
 def from_env() -> FastAPI:

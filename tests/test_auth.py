@@ -89,3 +89,13 @@ def test_logout_encerra_sessao(client):
 
 def test_me_sem_login(client):
     assert client.get("/api/me").status_code == 401
+
+
+def test_falhas_de_outros_ips_nao_trancam_o_login(client):
+    signup(client)
+    from datetime import UTC, datetime
+
+    for i in range(30):
+        client.app.state.login_limiter.falhou(f"10.0.0.{i}", datetime.now(UTC))
+    novo = TestClient(client.app)
+    assert novo.post("/api/auth/login", json={"email": "a@x.com", "senha": SENHA}).status_code == 200

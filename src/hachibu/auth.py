@@ -25,9 +25,15 @@ _hasher = PasswordHasher()
 
 
 class LoginLimiter:
-    """Contador de falhas em memória (um processo só): 5 por IP em 10 min, 20 no total."""
+    """Contador de falhas em memória (um processo só): 5 por IP em 10 min e, opcionalmente, um teto global.
 
-    def __init__(self, max_falhas: int = 5, janela: timedelta = timedelta(minutes=10), max_global: int = 20):
+    O teto global só serve ao cadastro (força bruta do convite). No login ele deixaria qualquer anônimo
+    trancar a entrada de todos os usuários com 20 tentativas erradas.
+    """
+
+    def __init__(
+        self, max_falhas: int = 5, janela: timedelta = timedelta(minutes=10), max_global: int | None = None
+    ):
         self.max_falhas = max_falhas
         self.janela = janela
         self.max_global = max_global
@@ -38,7 +44,8 @@ class LoginLimiter:
         with self._lock:
             self._falhas = [(t, a) for t, a in self._falhas if agora - t < self.janela]
             por_ip = sum(1 for _, a in self._falhas if a == ip)
-            return por_ip >= self.max_falhas or len(self._falhas) >= self.max_global
+            estourou_global = self.max_global is not None and len(self._falhas) >= self.max_global
+            return por_ip >= self.max_falhas or estourou_global
 
     def falhou(self, ip: str, agora: datetime) -> None:
         with self._lock:
@@ -118,7 +125,7 @@ UserId = Annotated[int, Depends(current_user)]
 @router.post("/auth/signup", status_code=201)
 def signup(dados: SignupIn, request: Request, response: Response, db: Db) -> dict:
     settings: Settings = request.app.state.settings
-    limiter: LoginLimiter = request.app.state.login_limiter
+    limiter: LoginLimiter = request.app.state.signup_limiter
     ip, agora = _ip(request), datetime.now(UTC)
     if limiter.bloqueado(ip, agora):
         raise HTTPException(429, "muitas_tentativas")

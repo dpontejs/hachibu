@@ -41,3 +41,15 @@ def test_nao_sai_da_pasta(spa):
 
 def test_sem_build_nao_serve_spa(client):
     assert client.get("/").status_code == 404
+
+
+def test_asset_inexistente_da_404_e_nao_html(spa):
+    # Um PWA aberto com o index antigo pede um asset de hash velho: tem de falhar, não virar HTML.
+    r = spa.get("/assets/index-velho123.js")
+    assert r.status_code == 404
+
+
+def test_index_sem_cache_e_assets_imutaveis(spa):
+    assert spa.get("/").headers["cache-control"] == "no-cache"
+    assert spa.get("/treino").headers["cache-control"] == "no-cache"
+    assert "immutable" in spa.get("/assets/app.js").headers["cache-control"]
