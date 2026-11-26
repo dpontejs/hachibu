@@ -50,3 +50,32 @@ def test_migracao_002_preserva_dados(tmp_path):
     assert migrate(conn) == ["002_alimentos.sql"]
     g = conn.execute("SELECT kcal, origem, ajustada_em FROM goals WHERE user_id = 1").fetchone()
     assert (g["kcal"], g["origem"], g["ajustada_em"]) == (2759, "formula", None)
+
+
+def test_busca_arroz_integral_cozido_primeiro(make_user):
+    r = make_user().get("/api/alimentos", params={"q": "arroz integral cozido"})
+    assert r.status_code == 200
+    assert r.json()[0]["id"] == 1
+    assert set(r.json()[0]) == {"id", "nome", "categoria", "kcal", "proteina_g", "carbo_g", "gordura_g"}
+
+
+def test_busca_ignora_acento_e_ordem(make_user):
+    c = make_user()
+    ids = [c.get("/api/alimentos", params={"q": q}).json()[0]["id"] for q in ("Pão Francês", "frances pao")]
+    assert ids[0] == ids[1]
+
+
+def test_busca_curta_422(make_user):
+    assert make_user().get("/api/alimentos", params={"q": "a"}).status_code == 422
+
+
+def test_busca_exige_login(client):
+    assert client.get("/api/alimentos", params={"q": "arroz"}).status_code == 401
+
+
+def test_busca_sem_resultado_lista_vazia(make_user):
+    assert make_user().get("/api/alimentos", params={"q": "xyzqwerty"}).json() == []
+
+
+def test_busca_limita_resultados(make_user):
+    assert len(make_user().get("/api/alimentos", params={"q": "carne"}).json()) <= 20

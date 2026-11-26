@@ -22,6 +22,7 @@ def create_app(settings: Settings) -> FastAPI:
     app.include_router(auth.router)
     app.include_router(perfil.router)
     app.include_router(diario.router)
+    app.include_router(alimentos.router)
 
     @app.get("/healthz")
     def healthz() -> dict:

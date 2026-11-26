@@ -5,6 +5,12 @@ import re
 import sqlite3
 import unicodedata
 from pathlib import Path
+from typing import Annotated
+
+from fastapi import APIRouter, Query
+
+from hachibu.auth import UserId
+from hachibu.db import Db
 
 TACO_CSV = Path(__file__).parent / "data" / "taco.csv"
 VALORES = ("kcal", "proteina_g", "carbo_g", "gordura_g", "fibra_g")
@@ -33,3 +39,28 @@ def carregar_taco(conn: sqlite3.Connection) -> int:
     )
     conn.execute("COMMIT")
     return len(linhas)
+
+
+def buscar_alimentos(conn: sqlite3.Connection, q: str, limite: int = 20) -> list[dict]:
+    """Todos os termos precisam aparecer no nome.
+
+    Ordem: quem começa pelo 1º termo, depois o nome mais curto.
+    """
+    termos = normalizar(q).split()
+    if not termos:
+        return []
+    filtros = " AND ".join("nome_busca LIKE ?" for _ in termos)
+    linhas = conn.execute(
+        f"SELECT id, nome, categoria, kcal, proteina_g, carbo_g, gordura_g FROM foods WHERE {filtros} "
+        "ORDER BY nome_busca NOT LIKE ?, length(nome_busca), nome_busca LIMIT ?",
+        (*(f"%{t}%" for t in termos), f"{termos[0]}%", limite),
+    ).fetchall()
+    return [dict(r) for r in linhas]
+
+
+router = APIRouter(prefix="/api")
+
+
+@router.get("/alimentos")
+def rota_buscar(user_id: UserId, db: Db, q: Annotated[str, Query(min_length=2, max_length=60)]) -> list[dict]:
+    return buscar_alimentos(db, q)
