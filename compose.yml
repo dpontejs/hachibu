@@ -1,0 +1,21 @@
+# Desenvolvimento local da imagem: docker compose up --build
+services:
+  hachibu:
+    build: .
+    env_file: .env
+    environment:
+      COOKIE_SECURE: "false"
+    ports:
+      - "8000:8000"
+    volumes:
+      - hachibu_data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  hachibu_data:

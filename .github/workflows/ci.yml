@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      - run: uv run ruff check
+      - run: uv run ruff format --check
+      - run: uv run pytest
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test -- --run
+
+  # Builda a imagem em todo PR (pega Dockerfile quebrado) e publica a partir da main.
+  # A VPS acompanha :main (repo infra, stack hachibu).
+  image:
+    needs: [test, web]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/dpontejs/hachibu
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build da imagem
+        run: docker build -t $IMAGE:sha-$GITHUB_SHA .
+
+      - name: Smoke test (saudável, front, manifest, API protegida)
+        run: |
+          docker run -d --name smoke -e SESSION_SECRET=$(openssl rand -hex 32) -e INVITE_CODE=ci \
+            -v smoke_data:/data -p 8000:8000 --read-only --tmpfs /tmp --cap-drop ALL $IMAGE:sha-$GITHUB_SHA
+          for i in $(seq 1 30); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' smoke)" = healthy ] && break
+            sleep 1
+          done
+          docker inspect -f '{{.State.Health.Status}}' smoke | grep -qx healthy
+          curl -fsS http://127.0.0.1:8000/ | grep -q '<div id="root">'
+          curl -fsS http://127.0.0.1:8000/manifest.webmanifest | grep -q '"standalone"'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/me)" = 401
+
+      - name: Login no GHCR
+        if: github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # :sha-<commit> é imutável (alvo de rollback); :main anda e é o que a VPS segue.
+      - name: Publicar imagem
+        if: github.ref == 'refs/heads/main'
+        run: |
+          docker tag $IMAGE:sha-$GITHUB_SHA $IMAGE:main
+          docker push $IMAGE:sha-$GITHUB_SHA
+          docker push $IMAGE:main
