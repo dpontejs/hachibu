@@ -11,7 +11,7 @@ export function TelaDeEntrada({ titulo, children }: { titulo: string; children: 
         <Marca tamanho={56} />
         <div>
           <div className="px entrada__nome">HACHIBU</div>
-          <div className="mudo entrada__lema">coma até 80%, treine com constância</div>
+          <div className="mudo entrada__lema">treino e dieta, um dia de cada vez</div>
         </div>
       </div>
       <section className="entrada__caixa">

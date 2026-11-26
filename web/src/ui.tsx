@@ -119,11 +119,11 @@ export function Icone({ nome, tamanho = 16 }: { nome: NomeIcone; tamanho?: numbe
   );
 }
 
-/** O "8" do logo, nos mesmos pixels do ícone do app. */
+/** O "H" pixelado do logo, nos mesmos pixels do ícone do app. */
 export function Marca({ tamanho = 28 }: { tamanho?: number }) {
-  const oito = [".###.", "#...#", "#...#", ".###.", "#...#", "#...#", ".###."];
+  const letra = ["##...##", "##...##", "##...##", "#######", "##...##", "##...##", "##...##"];
   const px: { x: number; y: number }[] = [];
-  oito.forEach((linha, y) => {
+  letra.forEach((linha, y) => {
     for (let x = 0; x < linha.length; x++) if (linha[x] === "#") px.push({ x, y });
   });
   return (
@@ -131,7 +131,7 @@ export function Marca({ tamanho = 28 }: { tamanho?: number }) {
       className="marca"
       width={tamanho}
       height={tamanho}
-      viewBox="-2 -1.5 9 10"
+      viewBox="-1.5 -1.5 10 10"
       shapeRendering="crispEdges"
       aria-hidden="true"
     >

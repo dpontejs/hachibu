@@ -1,4 +1,4 @@
-// Gera public/icons/icon-{180,192,512}.png: um "8" pixelado no verde do acento
+// Gera public/icons/icon-{180,192,512}.png: um "H" pixelado no verde do acento
 // sobre o fundo do tema, com sombra dura de 1 pixel. Só usa a stdlib do Node.
 // Uso: node scripts/gerar-icones.mjs
 import { writeFileSync, mkdirSync } from "node:fs";
@@ -10,13 +10,13 @@ const FUNDO = [0x12, 0x14, 0x1a];
 const ACENTO = [0x7c, 0xf2, 0x9a];
 const SOMBRA = [0x2c, 0x6b, 0x42];
 
-const GRADE = 13; // células por lado; o "8" (5×7) fica no meio, longe da área de corte "maskable"
-const OITO = [".###.", "#...#", "#...#", ".###.", "#...#", "#...#", ".###."];
-const X0 = 4;
+const GRADE = 13; // células por lado; o "H" (7×7) fica no meio, longe da área de corte "maskable"
+const LETRA = ["##...##", "##...##", "##...##", "#######", "##...##", "##...##", "##...##"];
+const X0 = 3;
 const Y0 = 3;
 
 function celula(cx, cy) {
-  const pinta = (x, y) => OITO[y - Y0]?.[x - X0] === "#";
+  const pinta = (x, y) => LETRA[y - Y0]?.[x - X0] === "#";
   if (pinta(cx, cy)) return ACENTO;
   if (pinta(cx - 1, cy - 1)) return SOMBRA;
   return FUNDO;
