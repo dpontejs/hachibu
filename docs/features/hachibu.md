@@ -118,6 +118,10 @@ make test && make eval && docker compose up   # local
 5. **8–10/12 Avaliação:** ~35 casos, gabarito das fotos, Langfuse, tabela comparativa, escolha da arquitetura do deploy.
 6. **11–13/12 Entrega:** README como relatório técnico, slides em PDF, polimento visual, tela Progresso com gráficos de peso, carga e ritmo.
 
+## Depois da entrega
+
+- **Avaliação de produto industrializado** (inspirada no Yuka): pela foto do rótulo ou pelo nome, nota calculada em código a partir de Nutri-Score, grupo NOVA e aditivos (Open Food Facts); o Gemini lê o rótulo quando o produto não está na base (tabela nutricional e lupa frontal da ANVISA) e explica a nota; alternativas são produtos reais da mesma categoria com nota melhor. A nota nunca é gerada pelo LLM.
+
 ## Riscos e dúvidas abertas
 
 - Prazo apertado, agora com cardápio e corrida. Se atrasar, cortes nesta ordem: tela Progresso, card de diagnóstico, lista de compras. As três arquiteturas, a avaliação e o deploy não são cortáveis.

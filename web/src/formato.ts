@@ -3,7 +3,7 @@
 
 export const FUSO = "America/Sao_Paulo";
 
-const DIAS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
+const DIAS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB"];
 const MESES = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
 
 /** "2026-11-26" → "QUI · 26 NOV". A data já vem no fuso certo; não converte. */
@@ -45,6 +45,21 @@ export function horaMinuto(iso: string): string {
 /** 1500 → "1,5"; 3000 → "3". */
 export function litros(ml: number): string {
   return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(ml / 1000);
+}
+
+/** 1.55 → "1,55"; com `casas`, fixa as casas decimais (0.5 → "0,50"). */
+export function decimal(n: number, casas?: number): string {
+  return new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: casas ?? 0,
+    maximumFractionDigits: casas ?? 2,
+  }).format(n);
+}
+
+/** De onde veio a meta, do jeito que o usuário fala. */
+export function rotuloOrigem(origem: string | undefined): string {
+  if (origem === "profissional") return "seu nutricionista";
+  if (origem === "coach") return "ajuste do coach";
+  return "fórmula";
 }
 
 export function porcento(valor: number, meta: number): number {

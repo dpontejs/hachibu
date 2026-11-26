@@ -17,6 +17,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/hachibu"]
+# Hatch inclui arquivos não-Python dentro do pacote (migrations/*.sql, data/*.csv).
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

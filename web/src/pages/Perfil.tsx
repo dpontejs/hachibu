@@ -1,9 +1,10 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import {
   api,
   ApiError,
   mensagemDeErro,
+  type Diagnostico as DadosDiagnostico,
   type Equipamento,
   type Metas,
   type Nivel,
@@ -11,7 +12,8 @@ import {
   type Perfil as DadosPerfil,
   type Sexo,
 } from "../api";
-import { litros } from "../formato";
+import Diagnostico from "../components/Diagnostico";
+import { litros, rotuloOrigem } from "../formato";
 
 interface Form {
   sexo: Sexo | "";
@@ -26,6 +28,10 @@ interface Form {
   percentual_gordura: string;
   cintura_cm: string;
   condicoes_saude: string;
+  meta_profissional_kcal: string;
+  meta_profissional_proteina_g: string;
+  meta_profissional_carbo_g: string;
+  meta_profissional_gordura_g: string;
 }
 
 const VAZIO: Form = {
@@ -41,6 +47,10 @@ const VAZIO: Form = {
   percentual_gordura: "",
   cintura_cm: "",
   condicoes_saude: "",
+  meta_profissional_kcal: "",
+  meta_profissional_proteina_g: "",
+  meta_profissional_carbo_g: "",
+  meta_profissional_gordura_g: "",
 };
 
 function deApi(p: DadosPerfil): Form {
@@ -58,6 +68,10 @@ function deApi(p: DadosPerfil): Form {
     percentual_gordura: s(p.percentual_gordura),
     cintura_cm: s(p.cintura_cm),
     condicoes_saude: p.condicoes_saude ?? "",
+    meta_profissional_kcal: s(p.meta_profissional_kcal),
+    meta_profissional_proteina_g: s(p.meta_profissional_proteina_g),
+    meta_profissional_carbo_g: s(p.meta_profissional_carbo_g),
+    meta_profissional_gordura_g: s(p.meta_profissional_gordura_g),
   };
 }
 
@@ -76,6 +90,11 @@ function paraApi(f: Form): DadosPerfil {
     percentual_gordura: opcional(f.percentual_gordura),
     cintura_cm: opcional(f.cintura_cm),
     condicoes_saude: f.condicoes_saude.trim() || null,
+    // Campo vazio manda null: apagar a meta profissional volta para a fórmula.
+    meta_profissional_kcal: opcional(f.meta_profissional_kcal),
+    meta_profissional_proteina_g: opcional(f.meta_profissional_proteina_g),
+    meta_profissional_carbo_g: opcional(f.meta_profissional_carbo_g),
+    meta_profissional_gordura_g: opcional(f.meta_profissional_gordura_g),
   };
 }
 
@@ -87,6 +106,8 @@ export default function Perfil() {
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [salvo, setSalvo] = useState(false);
+  const [diag, setDiag] = useState<DadosDiagnostico | null>(null);
+  const topo = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let vivo = true;
@@ -127,6 +148,9 @@ export default function Perfil() {
       setMetas(r.metas);
       setNovo(false);
       setSalvo(true);
+      // O diagnóstico é um extra: se falhar, as metas novas já estão na tela.
+      setDiag(await api.diagnostico().catch(() => null));
+      topo.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
     } catch (e) {
       if (e instanceof ApiError) setCampos(e.campos);
       setErro(mensagemDeErro(e));
@@ -168,12 +192,15 @@ export default function Perfil() {
         <div className="rotulo px">{novo ? "ETAPA 1 DE 2" : "PERFIL"}</div>
         <h1 className="perfil__titulo">{novo ? "Vamos calibrar suas metas" : "Seu perfil"}</h1>
         <p className="mudo perfil__intro">
-          As metas saem de uma fórmula fixa (Mifflin-St Jeor, ou Katch-McArdle se você souber seu % de gordura). A
-          entrevista com o coach vem na próxima etapa.
+          As metas saem de uma fórmula fixa (Mifflin-St Jeor, ou Katch-McArdle se você souber seu % de gordura), ou
+          da meta que seu nutricionista passou, se você tiver uma. A entrevista com o coach vem na próxima etapa.
         </p>
       </header>
 
-      {metas && <PainelMetas metas={metas} destaque={salvo} />}
+      <div ref={topo} className="perfil__resultado">
+        {metas && <PainelMetas metas={metas} destaque={salvo} />}
+        {salvo && diag && <Diagnostico dados={diag} />}
+      </div>
 
       <form className="formulario perfil__form" onSubmit={enviar} noValidate={false}>
         <Grupo titulo="CORPO">
@@ -247,7 +274,7 @@ export default function Perfil() {
           />
         </Grupo>
 
-        <Grupo titulo="OPCIONAL" nota="Deixe em branco o que não souber.">
+        <Grupo titulo="OPCIONAL" nota="Deixe em branco o que não souber." destaque>
           <div className="grade-2">
             {numero("percentual_gordura", "Gordura corporal", "%", 3, 60, false)}
             {numero("cintura_cm", "Cintura", "cm", 40, 200, false)}
@@ -271,6 +298,19 @@ export default function Perfil() {
           </label>
         </Grupo>
 
+        <Grupo
+          titulo="NUTRICIONISTA"
+          nota="Meta prescrita por nutricionista (opcional). Com as kcal preenchidas, ela vale no lugar da fórmula; macros em branco são calculados. Apague as kcal para voltar à fórmula."
+          destaque
+        >
+          {numero("meta_profissional_kcal", "Calorias por dia", "kcal", 1000, 5000, false)}
+          <div className="grade-3">
+            {numero("meta_profissional_proteina_g", "Proteína", "g", 0, 500, false)}
+            {numero("meta_profissional_carbo_g", "Carbo", "g", 0, 1000, false)}
+            {numero("meta_profissional_gordura_g", "Gordura", "g", 0, 300, false)}
+          </div>
+        </Grupo>
+
         {erro && (
           <p className="aviso" role="alert">
             {erro}
@@ -286,9 +326,19 @@ export default function Perfil() {
   );
 }
 
-function Grupo({ titulo, nota, children }: { titulo: string; nota?: string; children: ReactNode }) {
+function Grupo({
+  titulo,
+  nota,
+  destaque = false,
+  children,
+}: {
+  titulo: string;
+  nota?: string;
+  destaque?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <fieldset className="grupo">
+    <fieldset className={destaque ? "grupo grupo--opcional" : "grupo"}>
       <legend className="rotulo px">{titulo}</legend>
       {nota && <p className="mudo grupo__nota">{nota}</p>}
       {children}
@@ -343,6 +393,7 @@ function PainelMetas({ metas, destaque }: { metas: Metas; destaque: boolean }) {
       <div className="metas__kcal">
         <span className="vt metas__grande">{metas.kcal}</span>
         <span className="vt mudo">kcal/dia</span>
+        <span className="meta-origem">{rotuloOrigem(metas.origem)}</span>
       </div>
       <dl className="metas__grade">
         <div style={{ color: "var(--prot)" }}>
@@ -358,7 +409,7 @@ function PainelMetas({ metas, destaque }: { metas: Metas; destaque: boolean }) {
           <dd className="vt">{metas.gordura_g}g</dd>
         </div>
         <div style={{ color: "var(--agua)" }}>
-          <dt className="px">ÁGUA</dt>
+          <dt className="px">AGUA</dt>
           <dd className="vt">{litros(metas.agua_ml)} L</dd>
         </div>
       </dl>

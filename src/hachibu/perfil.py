@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 
 from hachibu.auth import UserId
 from hachibu.db import Db
-from hachibu.metas import Metas, PerfilIn, calcular_metas
+from hachibu.metas import Diagnostico, Metas, PerfilIn, calcular_metas, diagnostico
 
 router = APIRouter(prefix="/api")
 
@@ -13,7 +13,8 @@ CAMPOS = list(PerfilIn.model_fields)
 
 def ler_metas(db, user_id: int) -> Metas | None:
     row = db.execute(
-        "SELECT kcal, proteina_g, carbo_g, gordura_g, agua_ml FROM goals WHERE user_id = ?", (user_id,)
+        "SELECT kcal, proteina_g, carbo_g, gordura_g, agua_ml, origem FROM goals WHERE user_id = ?",
+        (user_id,),
     ).fetchone()
     return Metas(**dict(row)) if row else None
 
@@ -31,11 +32,12 @@ def salvar_perfil(perfil: PerfilIn, user_id: UserId, db: Db) -> dict:
         (user_id, *(getattr(perfil, c) for c in CAMPOS)),
     )
     db.execute(
-        "INSERT INTO goals (user_id, kcal, proteina_g, carbo_g, gordura_g, agua_ml) "
-        "VALUES (?, ?, ?, ?, ?, ?) "
+        "INSERT INTO goals (user_id, kcal, proteina_g, carbo_g, gordura_g, agua_ml, origem, ajustada_em) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, NULL) "
         "ON CONFLICT(user_id) DO UPDATE SET kcal = excluded.kcal, proteina_g = excluded.proteina_g, "
-        "carbo_g = excluded.carbo_g, gordura_g = excluded.gordura_g, agua_ml = excluded.agua_ml",
-        (user_id, metas.kcal, metas.proteina_g, metas.carbo_g, metas.gordura_g, metas.agua_ml),
+        "carbo_g = excluded.carbo_g, gordura_g = excluded.gordura_g, agua_ml = excluded.agua_ml, "
+        "origem = excluded.origem, ajustada_em = NULL",
+        (user_id, metas.kcal, metas.proteina_g, metas.carbo_g, metas.gordura_g, metas.agua_ml, metas.origem),
     )
     db.execute("COMMIT")
     return {"perfil": perfil.model_dump(), "metas": metas.model_dump()}
@@ -47,3 +49,16 @@ def obter_perfil(user_id: UserId, db: Db) -> dict:
     if row is None:
         raise HTTPException(404, "perfil_inexistente")
     return {"perfil": dict(row), "metas": ler_metas(db, user_id).model_dump()}
+
+
+def ler_perfil(db, user_id: int) -> PerfilIn | None:
+    row = db.execute(f"SELECT {', '.join(CAMPOS)} FROM profiles WHERE user_id = ?", (user_id,)).fetchone()
+    return PerfilIn(**dict(row)) if row else None
+
+
+@router.get("/diagnostico")
+def obter_diagnostico(user_id: UserId, db: Db) -> Diagnostico:
+    perfil = ler_perfil(db, user_id)
+    if perfil is None:
+        raise HTTPException(409, "perfil_incompleto")
+    return diagnostico(perfil)

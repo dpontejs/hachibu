@@ -6,7 +6,7 @@ __pycache__/
 .env
 *.db
 *.db-*
-data/
+/data/
 web/node_modules/
 web/dist/
 .worktrees/

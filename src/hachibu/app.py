@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
-from hachibu import auth, diario, perfil
+from hachibu import alimentos, auth, diario, perfil
 from hachibu.config import Settings
 from hachibu.db import connect, migrate
 
@@ -15,12 +15,14 @@ def create_app(settings: Settings) -> FastAPI:
     app.state.settings = settings
     conn = connect(settings.db_path)
     migrate(conn)
+    alimentos.carregar_taco(conn)
     conn.close()
     app.state.login_limiter = auth.LoginLimiter()
     app.state.signup_limiter = auth.LoginLimiter(max_global=20)
     app.include_router(auth.router)
     app.include_router(perfil.router)
     app.include_router(diario.router)
+    app.include_router(alimentos.router)
 
     @app.get("/healthz")
     def healthz() -> dict:

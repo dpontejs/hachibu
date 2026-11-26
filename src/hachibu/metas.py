@@ -25,6 +25,11 @@ class PerfilIn(BaseModel):
     percentual_gordura: float | None = Field(default=None, ge=3, le=60)
     cintura_cm: float | None = Field(default=None, ge=40, le=200)
     condicoes_saude: str | None = Field(default=None, max_length=500)
+    # Meta prescrita por nutricionista: quando existe, substitui a fórmula (quem examinou sabe mais).
+    meta_profissional_kcal: int | None = Field(default=None, ge=1000, le=5000)
+    meta_profissional_proteina_g: int | None = Field(default=None, ge=0, le=500)
+    meta_profissional_carbo_g: int | None = Field(default=None, ge=0, le=1000)
+    meta_profissional_gordura_g: int | None = Field(default=None, ge=0, le=300)
 
 
 class Metas(BaseModel):
@@ -33,6 +38,20 @@ class Metas(BaseModel):
     carbo_g: int
     gordura_g: int
     agua_ml: int
+    origem: Literal["formula", "profissional", "coach"] = "formula"
+
+
+class Diagnostico(BaseModel):
+    tmb: int
+    formula: Literal["mifflin-st-jeor", "katch-mcardle"]
+    fator_atividade: float
+    gasto_diario: int
+    # Diferença em kcal entre a meta e o gasto diário: negativo é déficit, positivo é superávit.
+    ajuste_objetivo: int
+    relacao_cintura_altura: float | None
+    alerta_cintura: bool
+    abaixo_do_piso: bool
+    metas: Metas
 
 
 def _fator_atividade(dias: int) -> float:
@@ -52,16 +71,48 @@ def taxa_metabolica_basal(p: PerfilIn) -> float:
     return 10 * p.peso_kg + 6.25 * p.altura_cm - 5 * p.idade + (5 if p.sexo == "M" else -161)
 
 
+def gasto_diario(p: PerfilIn) -> float:
+    return taxa_metabolica_basal(p) * _fator_atividade(p.dias_semana)
+
+
 def calcular_metas(p: PerfilIn) -> Metas:
-    kcal = taxa_metabolica_basal(p) * _fator_atividade(p.dias_semana) * FATOR_OBJETIVO[p.objetivo]
-    kcal = max(kcal, PISO_KCAL[p.sexo])
     proteina = PROTEINA_G_POR_KG[p.objetivo] * p.peso_kg
     gordura = GORDURA_G_POR_KG * p.peso_kg
-    carbo = max((kcal - 4 * proteina - 9 * gordura) / 4, 0)
+    agua = round(AGUA_ML_POR_KG * p.peso_kg)
+    if p.meta_profissional_kcal is not None:
+        kcal = p.meta_profissional_kcal
+        proteina = p.meta_profissional_proteina_g if p.meta_profissional_proteina_g is not None else proteina
+        gordura = p.meta_profissional_gordura_g if p.meta_profissional_gordura_g is not None else gordura
+        carbo = p.meta_profissional_carbo_g
+        if carbo is None:
+            carbo = max((kcal - 4 * proteina - 9 * gordura) / 4, 0)
+        origem = "profissional"
+    else:
+        kcal = max(gasto_diario(p) * FATOR_OBJETIVO[p.objetivo], PISO_KCAL[p.sexo])
+        carbo = max((kcal - 4 * proteina - 9 * gordura) / 4, 0)
+        origem = "formula"
     return Metas(
         kcal=round(kcal),
         proteina_g=round(proteina),
         carbo_g=round(carbo),
         gordura_g=round(gordura),
-        agua_ml=round(AGUA_ML_POR_KG * p.peso_kg),
+        agua_ml=agua,
+        origem=origem,
+    )
+
+
+def diagnostico(p: PerfilIn) -> Diagnostico:
+    metas = calcular_metas(p)
+    rca = round(p.cintura_cm / p.altura_cm, 2) if p.cintura_cm else None
+    return Diagnostico(
+        tmb=round(taxa_metabolica_basal(p)),
+        formula="katch-mcardle" if p.percentual_gordura is not None else "mifflin-st-jeor",
+        fator_atividade=_fator_atividade(p.dias_semana),
+        gasto_diario=round(gasto_diario(p)),
+        ajuste_objetivo=metas.kcal - round(gasto_diario(p)),
+        relacao_cintura_altura=rca,
+        # Cintura/altura >= 0,5 é um marcador conhecido de gordura abdominal.
+        alerta_cintura=rca is not None and rca >= 0.5,
+        abaixo_do_piso=metas.kcal < PISO_KCAL[p.sexo],
+        metas=metas,
     )
