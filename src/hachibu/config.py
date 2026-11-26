@@ -11,6 +11,8 @@ class Settings:
     invite_code: str
     app_tz: str = "America/Sao_Paulo"
     cookie_secure: bool = True
+    # Pasta com o build do React (web/dist); None = só a API.
+    static_dir: str | None = None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -24,4 +26,5 @@ class Settings:
             invite_code=invite,
             app_tz=os.environ.get("APP_TZ", "America/Sao_Paulo"),
             cookie_secure=os.environ.get("COOKIE_SECURE", "true").lower() != "false",
+            static_dir=os.environ.get("STATIC_DIR") or None,
         )
