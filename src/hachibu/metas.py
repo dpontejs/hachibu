@@ -46,7 +46,8 @@ class Diagnostico(BaseModel):
     formula: Literal["mifflin-st-jeor", "katch-mcardle"]
     fator_atividade: float
     gasto_diario: int
-    ajuste_objetivo: float
+    # Diferença em kcal entre a meta e o gasto diário: negativo é déficit, positivo é superávit.
+    ajuste_objetivo: int
     relacao_cintura_altura: float | None
     alerta_cintura: bool
     abaixo_do_piso: bool
@@ -108,7 +109,7 @@ def diagnostico(p: PerfilIn) -> Diagnostico:
         formula="katch-mcardle" if p.percentual_gordura is not None else "mifflin-st-jeor",
         fator_atividade=_fator_atividade(p.dias_semana),
         gasto_diario=round(gasto_diario(p)),
-        ajuste_objetivo=FATOR_OBJETIVO[p.objetivo],
+        ajuste_objetivo=metas.kcal - round(gasto_diario(p)),
         relacao_cintura_altura=rca,
         # Cintura/altura >= 0,5 é um marcador conhecido de gordura abdominal.
         alerta_cintura=rca is not None and rca >= 0.5,

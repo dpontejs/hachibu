@@ -44,7 +44,7 @@ def test_remover_meta_profissional_volta_formula(make_user):
 def test_diagnostico_base():
     d = diagnostico(PerfilIn(**BASE, cintura_cm=90))
     assert (d.tmb, d.formula, d.fator_atividade, d.gasto_diario) == (1780, "mifflin-st-jeor", 1.55, 2759)
-    assert (d.ajuste_objetivo, d.relacao_cintura_altura, d.alerta_cintura) == (1.0, 0.5, True)
+    assert (d.ajuste_objetivo, d.relacao_cintura_altura, d.alerta_cintura) == (0, 0.5, True)
     assert d.abaixo_do_piso is False and d.metas.kcal == 2759
 
 
@@ -74,3 +74,10 @@ def test_hoje_mostra_origem(make_user):
     c.put("/api/perfil", json={**BASE, "meta_profissional_kcal": 1700})
     assert c.get("/api/hoje").json()["metas"]["origem"] == "profissional"
     assert c.get("/api/perfil").json()["perfil"]["meta_profissional_kcal"] == 1700
+
+
+def test_ajuste_e_diferenca_em_kcal_com_sinal():
+    # Perder: meta 2207 contra gasto 2759 → déficit de 552 kcal (negativo), nunca um fator 0.8.
+    assert diagnostico(PerfilIn(**{**BASE, "objetivo": "perder"})).ajuste_objetivo == -552
+    assert diagnostico(PerfilIn(**{**BASE, "objetivo": "ganhar"})).ajuste_objetivo == 276
+    assert diagnostico(PerfilIn(**BASE, meta_profissional_kcal=1700)).ajuste_objetivo == 1700 - 2759

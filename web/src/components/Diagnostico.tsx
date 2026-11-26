@@ -13,7 +13,8 @@ const FORMULA: Record<DadosDiagnostico["formula"], { nome: string; como: string 
   },
 };
 
-function explicarAjuste(ajuste: number): string {
+function explicarAjuste(ajuste: number, origem: string | undefined): string {
+  if (origem === "profissional") return "Diferença entre a meta do seu nutricionista e o seu gasto.";
   if (ajuste < 0) return "Déficit para perder gordura: comer um pouco menos do que você gasta.";
   if (ajuste > 0) return "Superávit para ganhar massa: comer um pouco mais do que você gasta.";
   return "Sem ajuste: o objetivo é manter o peso, então a meta fica no gasto.";
@@ -83,7 +84,7 @@ export default function Diagnostico({ dados }: { dados: DadosDiagnostico }) {
           A TMB vezes o fator de atividade, que sai dos seus dias de treino.
         </Linha>
         <Linha rotulo="AJUSTE" valor={<Num n={comSinal(dados.ajuste_objetivo)} unidade="kcal" />}>
-          {explicarAjuste(dados.ajuste_objetivo)}
+          {explicarAjuste(dados.ajuste_objetivo, dados.metas.origem)}
         </Linha>
         {dados.relacao_cintura_altura !== null && (
           <Linha

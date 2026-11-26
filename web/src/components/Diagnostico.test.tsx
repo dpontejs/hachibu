@@ -42,4 +42,14 @@ describe("Diagnostico", () => {
     expect(screen.getAllByText(/seu nutricionista/i).length).toBeGreaterThan(0);
     expect(screen.queryByText("0,50")).not.toBeInTheDocument();
   });
+
+  it("com meta do nutricionista, o ajuste é explicado como diferença da prescrição", () => {
+    render(
+      <Diagnostico
+        dados={{ ...BASE, ajuste_objetivo: -1059, metas: { ...BASE.metas, kcal: 1700, origem: "profissional" } }}
+      />,
+    );
+    expect(screen.getByText(/diferença entre a meta do seu nutricionista e o seu gasto/i)).toBeInTheDocument();
+    expect(screen.queryByText(/déficit para perder gordura/i)).not.toBeInTheDocument();
+  });
 });

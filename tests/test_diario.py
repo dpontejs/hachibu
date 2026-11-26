@@ -132,13 +132,28 @@ def test_refeicao_taco_invalida_nao_grava(make_user):
     assert c.get("/api/hoje").json()["refeicoes"] == []
 
 
-def test_kcal_do_cliente_ignorado_em_item_taco(make_user):
+def test_kcal_do_cliente_em_item_taco_e_recusado(make_user):
     c = com_perfil(make_user)
-    c.post(
-        "/api/refeicoes",
-        json={"nome": "Almoço", "kcal": 1, "itens": [{"alimento_id": 1, "gramas": 150, "kcal": 1}]},
+    r = c.post(
+        "/api/refeicoes", json={"nome": "Almoço", "itens": [{"alimento_id": 1, "gramas": 150, "kcal": 1}]}
     )
-    assert c.get("/api/hoje").json()["consumido"]["kcal"] == 185.3
+    assert r.status_code == 422
+    assert c.get("/api/hoje").json()["refeicoes"] == []
+
+
+def test_corpo_ambiguo_nao_vira_refeicao_manual(make_user):
+    # Com itens + macros, o pydantic escolhia o modelo manual: itens descartados e kcal do cliente gravado.
+    c = com_perfil(make_user)
+    corpo = {**ALMOCO, "itens": [{"alimento_id": 1, "gramas": 0}]}
+    assert c.post("/api/refeicoes", json=corpo).status_code == 422
+    assert c.get("/api/hoje").json()["refeicoes"] == []
+
+
+def test_erro_de_item_taco_aponta_so_o_ramo_taco(make_user):
+    c = com_perfil(make_user)
+    r = c.post("/api/refeicoes", json={"nome": "X", "itens": [{"alimento_id": 1, "gramas": 0}]})
+    campos = {e["loc"][-1] for e in r.json()["detail"]}
+    assert campos == {"gramas"}
 
 
 def test_hoje_lista_itens(make_user):

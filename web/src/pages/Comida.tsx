@@ -122,7 +122,9 @@ export default function Comida() {
       });
       navegar("/");
     } catch (e) {
-      if (e instanceof ApiError && e.status === 422 && Object.keys(e.campos).length) {
+      if (e instanceof ApiError && e.status === 422 && e.detail === "alimento_inexistente") {
+        setErro("Um alimento do prato não foi encontrado na tabela. Remova e busque de novo.");
+      } else if (e instanceof ApiError && e.status === 422 && Object.keys(e.campos).length) {
         setErro(
           Object.entries(e.campos)
             .map(([c, m]) => `${NOME_CAMPO[c] ?? c}: ${m}`)

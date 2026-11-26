@@ -1,10 +1,11 @@
 """Diário do dia: refeições, água e o saldo contra as metas."""
 
 from datetime import UTC, date, datetime
+from typing import Annotated
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Discriminator, Field, Tag
 
 from hachibu.auth import UserId
 from hachibu.db import Db
@@ -14,6 +15,8 @@ router = APIRouter(prefix="/api")
 
 
 class RefeicaoManualIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     nome: str = Field(min_length=1, max_length=120)
     kcal: float = Field(ge=0, le=5000)
     proteina_g: float = Field(ge=0, le=500)
@@ -22,12 +25,16 @@ class RefeicaoManualIn(BaseModel):
 
 
 class ItemTacoIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     alimento_id: int
     gramas: float = Field(gt=0, le=2000)
 
 
 class RefeicaoTacoIn(BaseModel):
     """Refeição montada com alimentos da TACO: os macros são calculados aqui, nunca vêm do cliente."""
+
+    model_config = ConfigDict(extra="forbid")
 
     nome: str = Field(min_length=1, max_length=120)
     itens: list[ItemTacoIn] = Field(min_length=1, max_length=30)
@@ -53,6 +60,13 @@ def _hoje(request: Request) -> str:
 
 MACROS = ("kcal", "proteina_g", "carbo_g", "gordura_g")
 
+# A presença de "itens" decide o formato. Sem isso, um corpo com itens e macros virava refeição manual
+# (itens descartados, kcal do cliente gravado), e os erros de validação misturavam os dois formatos.
+RefeicaoIn = Annotated[
+    Annotated[RefeicaoTacoIn, Tag("taco")] | Annotated[RefeicaoManualIn, Tag("manual")],
+    Discriminator(lambda v: "taco" if isinstance(v, dict) and "itens" in v else "manual"),
+]
+
 
 def _itens_da_taco(db, itens: list[ItemTacoIn]) -> list[dict]:
     calculados = []
@@ -72,9 +86,7 @@ def _itens_da_taco(db, itens: list[ItemTacoIn]) -> list[dict]:
 
 
 @router.post("/refeicoes", status_code=201)
-def registrar_refeicao(
-    dados: RefeicaoTacoIn | RefeicaoManualIn, user_id: UserId, request: Request, db: Db
-) -> dict:
+def registrar_refeicao(dados: RefeicaoIn, user_id: UserId, request: Request, db: Db) -> dict:
     if isinstance(dados, RefeicaoTacoIn):
         itens = _itens_da_taco(db, dados.itens)
         totais = {m: sum(i[m] for i in itens) for m in MACROS}

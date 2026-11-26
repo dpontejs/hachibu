@@ -87,4 +87,22 @@ describe("Comida", () => {
     expect(nomePorHora(18)).toBe("Jantar");
     expect(nomePorHora(23)).toBe("Jantar");
   });
+
+  it("alimento que sumiu da base mostra mensagem própria", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+        const u = String(url);
+        if (u.startsWith("/api/alimentos")) return json([ARROZ]);
+        if (u === "/api/refeicoes" && init?.method === "POST") return json({ detail: "alimento_inexistente" }, 422);
+        return json({ detail: "Not Found" }, 404);
+      }),
+    );
+    const user = userEvent.setup();
+    renderComida();
+    await user.type(screen.getByRole("searchbox", { name: /buscar alimento/i }), "arroz");
+    await user.click(await screen.findByRole("button", { name: /Arroz, integral, cozido/ }));
+    await user.click(screen.getByRole("button", { name: /salvar refeição/i }));
+    expect(await screen.findByText(/não foi encontrado/i)).toBeInTheDocument();
+  });
 });

@@ -177,6 +177,13 @@ function traduzir(msg: string, type: unknown, ctx: unknown): string {
   switch (type) {
     case "greater_than_equal":
       return `mínimo ${String(c.ge)}`;
+    case "greater_than":
+      return `maior que ${String(c.gt)}`;
+    case "missing":
+      return "obrigatório";
+    case "int_from_float":
+    case "int_parsing":
+      return "use um número inteiro";
     case "less_than_equal":
       return `máximo ${String(c.le)}`;
     case "string_too_short":

@@ -101,6 +101,7 @@ describe("422 em pt-BR", () => {
         { loc: ["body", "sexo"], msg: "Input should be 'M' or 'F'", type: "literal_error", ctx: { expected: "'M' or 'F'" } },
         { loc: ["body", "itens", 0, "alimento_id"], msg: "Value error, alimento inexistente", type: "value_error" },
         { loc: ["body", "outro"], msg: "Field required", type: "missing" },
+        { loc: ["body", "taco", "itens", 0, "gramas"], msg: "Input should be greater than 0", type: "greater_than", ctx: { gt: 0 } },
       ],
     });
     const erro = (await api.addAgua(0).catch((e) => e)) as ApiError;
@@ -110,7 +111,8 @@ describe("422 em pt-BR", () => {
       nome: "muito curto",
       sexo: "opção inválida",
       alimento_id: "alimento inexistente",
-      outro: "Field required",
+      outro: "obrigatório",
+      gramas: "maior que 0",
     });
   });
 });

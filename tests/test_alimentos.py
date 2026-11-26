@@ -79,3 +79,13 @@ def test_busca_sem_resultado_lista_vazia(make_user):
 
 def test_busca_limita_resultados(make_user):
     assert len(make_user().get("/api/alimentos", params={"q": "carne"}).json()) <= 20
+
+
+def test_csv_da_taco_e_versionado():
+    # O .gitignore ignorava qualquer pasta "data/": num clone limpo o app quebrava na subida.
+    import subprocess
+
+    from hachibu.alimentos import TACO_CSV
+
+    ignorado = subprocess.run(["git", "check-ignore", "-q", str(TACO_CSV)], cwd=TACO_CSV.parent)
+    assert ignorado.returncode == 1
