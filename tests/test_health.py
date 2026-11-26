@@ -8,4 +8,4 @@ def test_app_aplica_migracoes(app, settings):
     from hachibu.db import connect
 
     nomes = [r["name"] for r in connect(settings.db_path).execute("SELECT name FROM schema_version")]
-    assert nomes == ["001_inicial.sql"]
+    assert nomes == ["001_inicial.sql", "002_alimentos.sql"]
