@@ -1,5 +1,6 @@
 // Cliente da API do Hachibu. Uma função tipada por rota (contrato: plano
-// 2026-11-26-estrutura-inicial, Tasks 3–5). Toda chamada leva o cookie de sessão.
+// 2026-11-26-estrutura-inicial, Tasks 3–5; 2026-11-27-refeicoes-taco, Tasks 2–4).
+// Toda chamada leva o cookie de sessão.
 //
 // Regras globais:
 // - 401 fora do login → vai para /entrar.
@@ -24,7 +25,15 @@ export interface Perfil {
   percentual_gordura?: number | null;
   cintura_cm?: number | null;
   condicoes_saude?: string | null;
+  /** Meta prescrita por nutricionista: quando há kcal, ela substitui a fórmula. */
+  meta_profissional_kcal?: number | null;
+  meta_profissional_proteina_g?: number | null;
+  meta_profissional_carbo_g?: number | null;
+  meta_profissional_gordura_g?: number | null;
 }
+
+/** De onde veio a meta do dia. */
+export type OrigemMeta = "formula" | "profissional" | "coach";
 
 export interface Metas {
   kcal: number;
@@ -32,6 +41,8 @@ export interface Metas {
   carbo_g: number;
   gordura_g: number;
   agua_ml: number;
+  /** Opcional só para tolerar respostas antigas; o servidor novo sempre manda. */
+  origem?: OrigemMeta;
 }
 
 export interface PerfilComMetas {
@@ -51,11 +62,19 @@ export interface Consumido {
   gordura_g: number;
 }
 
+export interface ItemRefeicao {
+  nome: string;
+  gramas: number;
+  kcal: number;
+}
+
 export interface RefeicaoResumo {
   id: number;
   nome: string;
   kcal: number;
   criado_em: string;
+  /** Itens da TACO; refeição manual vem com lista vazia. */
+  itens?: ItemRefeicao[];
 }
 
 export interface Hoje {
@@ -72,6 +91,35 @@ export interface RefeicaoIn {
   proteina_g: number;
   carbo_g: number;
   gordura_g: number;
+}
+
+/** Alimento da TACO; valores por 100 g. */
+export interface Alimento {
+  id: number;
+  nome: string;
+  categoria: string;
+  kcal: number;
+  proteina_g: number;
+  carbo_g: number;
+  gordura_g: number;
+}
+
+/** Refeição montada com a TACO: o servidor calcula kcal e macros. */
+export interface RefeicaoTacoIn {
+  nome: string;
+  itens: { alimento_id: number; gramas: number }[];
+}
+
+export interface Diagnostico {
+  tmb: number;
+  formula: "mifflin-st-jeor" | "katch-mcardle";
+  fator_atividade: number;
+  gasto_diario: number;
+  ajuste_objetivo: number;
+  relacao_cintura_altura: number | null;
+  alerta_cintura: boolean;
+  abaixo_do_piso: boolean;
+  metas: Metas;
 }
 
 export class ApiError extends Error {
@@ -115,12 +163,31 @@ function extrairCampos(detail: unknown): Record<string, string> {
   if (!Array.isArray(detail)) return campos;
   for (const erro of detail) {
     if (!erro || typeof erro !== "object") continue;
-    const { loc, msg } = erro as { loc?: unknown; msg?: unknown };
+    const { loc, msg, type, ctx } = erro as { loc?: unknown; msg?: unknown; type?: unknown; ctx?: unknown };
     if (!Array.isArray(loc) || typeof msg !== "string") continue;
     const campo = String(loc[loc.length - 1] ?? "");
-    if (campo && !(campo in campos)) campos[campo] = msg;
+    if (campo && !(campo in campos)) campos[campo] = traduzir(msg, type, ctx);
   }
   return campos;
+}
+
+/** Mensagens do pydantic em pt-BR; tipo desconhecido fica com a mensagem original. */
+function traduzir(msg: string, type: unknown, ctx: unknown): string {
+  const c = (ctx && typeof ctx === "object" ? ctx : {}) as Record<string, unknown>;
+  switch (type) {
+    case "greater_than_equal":
+      return `mínimo ${String(c.ge)}`;
+    case "less_than_equal":
+      return `máximo ${String(c.le)}`;
+    case "string_too_short":
+      return "muito curto";
+    case "literal_error":
+      return "opção inválida";
+    case "value_error":
+      return msg.replace(/^Value error, /, "");
+    default:
+      return msg;
+  }
 }
 
 interface Opcoes {
@@ -194,6 +261,9 @@ export const api = {
   hoje: () => request<Hoje>("GET", "/hoje"),
   addRefeicao: (r: RefeicaoIn) => request<unknown>("POST", "/refeicoes", r),
   addAgua: (ml: number) => request<unknown>("POST", "/agua", { ml }),
+  buscarAlimentos: (q: string) => request<Alimento[]>("GET", `/alimentos?q=${encodeURIComponent(q)}`),
+  addRefeicaoTaco: (r: RefeicaoTacoIn) => request<unknown>("POST", "/refeicoes", r),
+  diagnostico: () => request<Diagnostico>("GET", "/diagnostico"),
 };
 
 /** Mensagem curta para mostrar ao usuário; `null` se foi só um redirecionamento. */

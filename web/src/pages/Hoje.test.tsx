@@ -49,6 +49,39 @@ describe("Hoje", () => {
     expect(screen.getByText("Almoço")).toBeInTheDocument();
   });
 
+  it("mostra a origem da meta e abre os itens da refeição ao tocar", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        json({
+          ...HOJE,
+          metas: { ...HOJE.metas, origem: "profissional" },
+          refeicoes: [
+            { ...HOJE.refeicoes[0], itens: [] },
+            {
+              ...HOJE.refeicoes[1],
+              itens: [{ nome: "Arroz, integral, cozido", gramas: 150, kcal: 185.3 }],
+            },
+          ],
+        }),
+      ),
+    );
+    renderHoje();
+
+    expect(await screen.findByText("seu nutricionista")).toBeInTheDocument();
+    expect(screen.queryByText("Arroz, integral, cozido")).not.toBeInTheDocument();
+
+    const almoco = screen.getByRole("button", { name: /Almoço/ });
+    expect(almoco).toHaveAttribute("aria-expanded", "false");
+    await userEvent.click(almoco);
+
+    expect(almoco).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Arroz, integral, cozido")).toBeInTheDocument();
+    expect(screen.getByText("150 g")).toBeInTheDocument();
+    // Refeição manual (sem itens) não vira botão.
+    expect(screen.queryByRole("button", { name: /Café da manhã/ })).not.toBeInTheDocument();
+  });
+
   it("registra água e recarrega o dia", async () => {
     let agua = 1500;
     const fetchMock = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {

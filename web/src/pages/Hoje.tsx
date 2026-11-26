@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router";
-import { api, ApiError, mensagemDeErro, type Hoje as DadosHoje } from "../api";
-import { horaMinuto, litros, rotuloDoDia, saudacao } from "../formato";
+import { api, ApiError, mensagemDeErro, type Hoje as DadosHoje, type RefeicaoResumo } from "../api";
+import { horaMinuto, litros, rotuloDoDia, rotuloOrigem, saudacao } from "../formato";
 import { Barra, Icone } from "../ui";
 
 const GOTAS = 12;
@@ -90,7 +90,12 @@ export default function Hoje() {
           <h2 id="kcal-titulo" className="rotulo px">
             KCAL
           </h2>
-          <span className="vt mudo meta-num">meta {metas.kcal}</span>
+          <span className="kcal__meta">
+            <span className="vt mudo meta-num">meta {metas.kcal}</span>
+            <span className="meta-origem" title="De onde veio a meta do dia">
+              {rotuloOrigem(metas.origem)}
+            </span>
+          </span>
         </div>
         <div className="linha kcal__numeros">
           <span className="vt kcal__grande">{Math.round(consumido.kcal)}</span>
@@ -155,11 +160,7 @@ export default function Hoje() {
         ) : (
           <ul className="refeicoes__lista">
             {dados.refeicoes.map((r) => (
-              <li key={r.id}>
-                <span className="vt refeicao__hora">{horaMinuto(r.criado_em)}</span>
-                <span className="refeicao__nome">{r.nome}</span>
-                <span className="vt refeicao__kcal">{Math.round(r.kcal)}</span>
-              </li>
+              <Refeicao key={r.id} r={r} />
             ))}
           </ul>
         )}
@@ -167,6 +168,47 @@ export default function Hoje() {
 
       <AdicionarManual aoSalvar={carregar} />
     </div>
+  );
+}
+
+function Refeicao({ r }: { r: RefeicaoResumo }) {
+  const [aberta, setAberta] = useState(false);
+  const itens = r.itens ?? [];
+  const linha = (
+    <>
+      <span className="vt refeicao__hora">{horaMinuto(r.criado_em)}</span>
+      <span className="refeicao__nome">{r.nome}</span>
+      <span className="vt refeicao__kcal">{Math.round(r.kcal)}</span>
+    </>
+  );
+  if (itens.length === 0) return <li className="refeicao">{linha}</li>;
+  const idItens = `refeicao-${r.id}-itens`;
+  return (
+    <li className={aberta ? "refeicao refeicao--aberta" : "refeicao"}>
+      <button
+        type="button"
+        className="refeicao__abrir"
+        aria-expanded={aberta}
+        aria-controls={idItens}
+        onClick={() => setAberta((a) => !a)}
+      >
+        {linha}
+        <span className="refeicao__seta px" aria-hidden="true">
+          {aberta ? "-" : "+"}
+        </span>
+      </button>
+      {aberta && (
+        <ul id={idItens} className="refeicao__itens">
+          {itens.map((i, n) => (
+            <li key={n}>
+              <span className="refeicao__item-nome">{i.nome}</span>
+              <span className="vt mudo">{Math.round(i.gramas)} g</span>
+              <span className="vt">{Math.round(i.kcal)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
   );
 }
 
@@ -273,9 +315,9 @@ function AdicionarManual({ aoSalvar }: { aoSalvar: () => Promise<void> }) {
       </label>
       <div className="adicionar__grade">
         {num("kcal", "Kcal", "", 5000)}
-        {num("proteina_g", "Proteína", "g", 1000)}
-        {num("carbo_g", "Carbo", "g", 1000)}
-        {num("gordura_g", "Gordura", "g", 1000)}
+        {num("proteina_g", "Proteína", "g", 500)}
+        {num("carbo_g", "Carbo", "g", 500)}
+        {num("gordura_g", "Gordura", "g", 500)}
       </div>
       {erro && (
         <p className="aviso" role="alert">
