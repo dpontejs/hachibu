@@ -366,4 +366,72 @@ describe("Coach", () => {
     await user.click(screen.getByRole("button", { name: /voltar/i }));
     expect(screen.getByRole("textbox", { name: /mensagem para o coach/i })).toBeInTheDocument();
   });
+
+  it("carregamento atrasado da conversa salva não sobrescreve a conversa escolhida na lista", async () => {
+    localStorage.setItem(CHAVE_THREAD, "t-x");
+    let soltarX: (r: Response) => void = () => {};
+    const conversa = (id: string, texto: string) =>
+      json({ thread_id: id, mensagens: [{ papel: "coach", texto, ferramentas: [] }], pendente: null });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: RequestInfo | URL) => {
+        const u = String(url);
+        if (u === "/api/coach/t-x") return new Promise<Response>((ok) => (soltarX = ok));
+        if (u === "/api/coach/t-y") return conversa("t-y", "Conversa Y");
+        if (u === "/api/coach/conversas")
+          return json({
+            conversas: [
+              { thread_id: "t-y", titulo: "ípsilon", criado_em: "2026-11-26T10:00:00Z", atualizado_em: "2026-11-26T10:00:00Z", pendente: false },
+            ],
+          });
+        return json({ detail: "Not Found" }, 404);
+      }),
+    );
+    const user = userEvent.setup();
+    renderCoach();
+
+    await user.click(screen.getByRole("button", { name: /conversas/i }));
+    await user.click(await screen.findByRole("button", { name: /ípsilon/i }));
+    expect(await screen.findByText("Conversa Y")).toBeInTheDocument();
+
+    soltarX(conversa("t-x", "Conversa X"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByText("Conversa X")).not.toBeInTheDocument();
+    expect(localStorage.getItem(CHAVE_THREAD)).toBe("t-y");
+  });
+
+  it("se abrir outra conversa falhar, a atual continua na tela", async () => {
+    localStorage.setItem(CHAVE_THREAD, "t-x");
+    mockFetch((u) => {
+      if (u === "/api/coach/t-x")
+        return json({ thread_id: "t-x", mensagens: [{ papel: "coach", texto: "Conversa X", ferramentas: [] }], pendente: null });
+      if (u === "/api/coach/t-y") return json({ detail: "coach_indisponivel" }, 503);
+      if (u === "/api/coach/conversas")
+        return json({
+          conversas: [
+            { thread_id: "t-y", titulo: "ípsilon", criado_em: "2026-11-26T10:00:00Z", atualizado_em: "2026-11-26T10:00:00Z", pendente: false },
+          ],
+        });
+    });
+    const user = userEvent.setup();
+    renderCoach();
+    expect(await screen.findByText("Conversa X")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /conversas/i }));
+    await user.click(await screen.findByRole("button", { name: /ípsilon/i }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText("Conversa X")).toBeInTheDocument();
+    expect(localStorage.getItem(CHAVE_THREAD)).toBe("t-x");
+  });
+
+  it("não abre a lista de conversas enquanto espera a resposta do coach", async () => {
+    mockFetch((u, init) => {
+      if (u === "/api/coach" && init?.method === "POST") return new Promise<Response>(() => {}) as never;
+    });
+    const user = userEvent.setup();
+    renderCoach();
+    await user.type(screen.getByRole("textbox", { name: /mensagem para o coach/i }), "oi");
+    await user.click(screen.getByRole("button", { name: /enviar/i }));
+    expect(screen.getByRole("button", { name: /conversas/i })).toBeDisabled();
+  });
 });

@@ -169,6 +169,8 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
   /** `null`: painel na conversa; lista: painel mostrando as conversas anteriores. */
   const [conversas, setConversas] = useState<ConversaCoach[] | null>(null);
   const [listando, setListando] = useState(false);
+  /** Cada carregamento de conversa pega um número; só o mais recente pode aplicar o resultado. */
+  const geracao = useRef(0);
 
   const lista = useRef<HTMLDivElement>(null);
   const seletor = useRef<HTMLInputElement>(null);
@@ -209,7 +211,8 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
     const id = lerThread();
     if (!id) return;
     let vivo = true;
-    void recarregar(id, () => vivo);
+    const minha = geracao.current;
+    void recarregar(id, () => vivo && geracao.current === minha);
     return () => {
       vivo = false;
     };
@@ -285,7 +288,7 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
   async function enviar(sugestao?: string) {
     const digitado = texto;
     const mensagem = (sugestao ?? digitado).trim().slice(0, LIMITE_TEXTO) || (foto ? MENSAGEM_FOTO : "");
-    if (!mensagem || ocupado || bloqueado) return;
+    if (!mensagem || ocupado || bloqueado || listando) return;
     const fotoEnviada = foto;
     const previaEnviada = previa;
     setEnvio({ texto: mensagem, previa: previaEnviada });
@@ -317,7 +320,10 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
     } catch (e) {
       setErro(mensagemDeErro(e));
       // 409: a pendência já foi resolvida (outra aba?); traz o estado real.
-      if (e instanceof ApiError && e.status === 409) await recarregar(threadId);
+      if (e instanceof ApiError && e.status === 409) {
+        const minha = ++geracao.current;
+        await recarregar(threadId, () => geracao.current === minha);
+      }
     } finally {
       setDecidindo(false);
     }
@@ -325,6 +331,7 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
 
   function novaConversa() {
     if (ocupado) return;
+    geracao.current++;
     gravarThread(null);
     setThreadId(null);
     setMensagens([]);
@@ -348,14 +355,37 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
     }
   }
 
-  function abrirConversa(id: string) {
+  async function abrirConversa(id: string) {
+    if (ocupado) return;
     setConversas(null);
     setErro(null);
-    if (id === threadId) return;
+    if (id === threadId) return; // já é a conversa na tela (ou a que está carregando)
+    const minha = ++geracao.current;
+    const vivo = () => geracao.current === minha;
+    const antes = { mensagens, pendente, carregando };
     setMensagens([]);
     setPendente(null);
     setCarregando(true);
-    void recarregar(id);
+    try {
+      const r = await api.coachHistorico(id);
+      if (!vivo()) return;
+      if (r) {
+        aplicar(r);
+        setCarregando(false);
+        return;
+      }
+      setErro("Essa conversa não existe mais.");
+    } catch (e) {
+      if (!vivo()) return;
+      setErro(mensagemDeErro(e));
+    }
+    // Falhou: a tela volta para a conversa de antes, que continua sendo a do threadId.
+    setMensagens(antes.mensagens);
+    setPendente(antes.pendente);
+    if (antes.carregando && threadId) {
+      const nova = ++geracao.current;
+      await recarregar(threadId, () => geracao.current === nova);
+    } else setCarregando(false);
   }
 
   function aoEnviar(ev: FormEvent) {
@@ -372,7 +402,7 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
 
   const vazio = mensagens.length === 0 && !envio && !carregando;
   // Sem esperar o histórico carregar, uma mensagem poderia furar uma aprovação pendente.
-  const podeEnviar = !ocupado && !bloqueado && !carregando && (texto.trim() !== "" || foto !== null);
+  const podeEnviar = !ocupado && !bloqueado && !carregando && !listando && (texto.trim() !== "" || foto !== null);
 
   const topo = (
     <header className="coach__topo">
@@ -417,7 +447,7 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
       <div className="coach">
         {topo}
         <div className="coach__lista">
-          <Conversas conversas={conversas} atual={threadId} onAbrir={abrirConversa} />
+          <Conversas conversas={conversas} atual={threadId} onAbrir={(id) => void abrirConversa(id)} />
         </div>
       </div>
     );

@@ -171,22 +171,10 @@ def historico(settings: Settings, modelo, user_id: int, thread_id: str) -> Respo
     return RespostaCoach(montar_mensagens(estado.values.get("messages", [])), pendente)
 
 
-@dataclass
-class ResumoThread:
-    primeira_fala: str
-    pendente: bool
-
-
-def resumir_threads(
-    settings: Settings, modelo, user_id: int, thread_ids: list[str]
-) -> dict[str, ResumoThread]:
-    """Primeira fala do aluno e se há proposta pendente. Threads sem mensagem salva ficam de fora."""
-    agente = _agente(settings, modelo, user_id, lambda: datetime.now(UTC))
-    resumos: dict[str, ResumoThread] = {}
-    for thread_id in thread_ids:
-        estado = agente.get_state({"configurable": {"thread_id": thread_id}})
-        falas = [m for m in estado.values.get("messages", []) if isinstance(m, HumanMessage)]
-        if falas:
-            primeira = falas[0].text.replace(MARCA_FOTO, "")
-            resumos[thread_id] = ResumoThread(primeira, bool(estado.interrupts))
-    return resumos
+def primeira_fala(settings: Settings, thread_id: str) -> str | None:
+    """Primeira fala do aluno na thread, lida direto do checkpointer (sem modelo). None se não há mensagem."""
+    estado = _checkpointer(settings).get({"configurable": {"thread_id": thread_id}})
+    falas = [
+        m for m in (estado or {}).get("channel_values", {}).get("messages", []) if isinstance(m, HumanMessage)
+    ]
+    return falas[0].text.replace(MARCA_FOTO, "") if falas else None

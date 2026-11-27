@@ -69,3 +69,43 @@ def test_conversa_sem_nenhuma_mensagem_salva_nao_aparece(app, settings, aluno):
         )
     app.state.modelo_coach = roteiro("Oi!")
     assert conversas(aluno) == []
+
+
+class Quebrado:
+    def bind_tools(self, *a, **k):
+        return self
+
+    def invoke(self, *a, **k):
+        raise RuntimeError("gemini fora do ar")
+
+
+def test_envio_que_falha_em_conversa_nova_nao_entra_na_lista(app, aluno):
+    app.state.modelo_coach = Quebrado()
+    assert enviar(aluno, "oi").status_code == 503
+    assert enviar(aluno, "oi").status_code == 503
+    app.state.modelo_coach = roteiro()
+    assert conversas(aluno) == []
+
+
+def test_envio_que_falha_nao_sobe_a_conversa_na_lista(app, aluno):
+    app.state.modelo_coach = roteiro("Oi!", "Olá!")
+    primeira = enviar(aluno, "primeira").json()["thread_id"]
+    segunda = enviar(aluno, "segunda").json()["thread_id"]
+    app.state.modelo_coach = Quebrado()
+    assert enviar(aluno, "de novo", thread_id=primeira).status_code == 503
+    assert [c["thread_id"] for c in conversas(aluno)] == [segunda, primeira]
+
+
+def test_lista_funciona_sem_o_modelo_configurado(app, aluno):
+    app.state.modelo_coach = roteiro("Oi!")
+    enviar(aluno, "oi")
+    app.state.modelo_coach = None
+    assert [c["titulo"] for c in conversas(aluno)] == ["oi"]
+
+
+def test_aprovar_a_proposta_tira_a_marca_de_pendente(app, aluno):
+    app.state.modelo_coach = roteiro(chamada("ajustar_metas", {"kcal": 2400, "justificativa": "x"}), "Feito.")
+    thread = enviar(aluno, "baixa minha meta").json()["thread_id"]
+    assert conversas(aluno)[0]["pendente"] is True
+    aluno.post(f"/api/coach/{thread}/decisao", json={"aprovar": True})
+    assert conversas(aluno)[0]["pendente"] is False
