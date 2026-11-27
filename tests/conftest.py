@@ -38,3 +38,13 @@ def make_user(app):
         return c
 
     return _make
+
+
+@pytest.fixture
+def aluno(app, make_user):
+    """Usuário logado com o perfil BASE preenchido."""
+    from tests.test_metas import BASE
+
+    c = make_user()
+    c.put("/api/perfil", json=BASE)
+    return c

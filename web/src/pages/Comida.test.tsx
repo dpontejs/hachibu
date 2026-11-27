@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import Comida, { nomePorHora } from "./Comida";
 
@@ -21,12 +21,18 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
+function LerBusca() {
+  const { search } = useLocation();
+  return <p>COACH {search}</p>;
+}
+
 function renderComida() {
   return render(
     <MemoryRouter initialEntries={["/comida"]}>
       <Routes>
         <Route path="/comida" element={<Comida />} />
         <Route path="/" element={<p>TELA HOJE</p>} />
+        <Route path="/coach" element={<LerBusca />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -104,5 +110,13 @@ describe("Comida", () => {
     await user.click(await screen.findByRole("button", { name: /Arroz, integral, cozido/ }));
     await user.click(screen.getByRole("button", { name: /salvar refeição/i }));
     expect(await screen.findByText(/não foi encontrado/i)).toBeInTheDocument();
+  });
+
+  it("POR FOTO leva ao coach com a câmera pedida (celular)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => json({ detail: "Not Found" }, 404)));
+    const user = userEvent.setup();
+    renderComida();
+    await user.click(screen.getByRole("button", { name: /por foto/i }));
+    expect(await screen.findByText("COACH ?foto=1")).toBeInTheDocument();
   });
 });

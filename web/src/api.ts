@@ -122,6 +122,37 @@ export interface Diagnostico {
   metas: Metas;
 }
 
+// ---------- coach (plano 2026-11-27-coach-agente, Task 5) ----------
+
+export interface MensagemCoach {
+  papel: "usuario" | "coach";
+  texto: string;
+  /** Tools usadas para produzir a resposta; `skill:<nome>` para skills carregadas. */
+  ferramentas: string[];
+}
+
+export interface ArgsAjusteMetas {
+  kcal: number;
+  proteina_g?: number;
+  carbo_g?: number;
+  gordura_g?: number;
+  justificativa: string;
+}
+
+/** Ação que espera aprovação do aluno (hoje só `ajustar_metas`). */
+export interface PendenciaCoach {
+  ferramenta: string;
+  args: Record<string, unknown>;
+  descricao: string;
+}
+
+export interface RespostaCoach {
+  thread_id: string;
+  /** A conversa inteira da thread. */
+  mensagens: MensagemCoach[];
+  pendente: PendenciaCoach | null;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly detail: unknown;
@@ -209,7 +240,10 @@ async function request<T>(
   opcoes: Opcoes = {},
 ): Promise<T> {
   const init: RequestInit = { method, credentials: "include", headers: {} };
-  if (corpo !== undefined) {
+  if (corpo instanceof FormData) {
+    // O navegador monta o Content-Type com o boundary do multipart.
+    init.body = corpo;
+  } else if (corpo !== undefined) {
     init.headers = { "Content-Type": "application/json" };
     init.body = JSON.stringify(corpo);
   }
@@ -271,13 +305,42 @@ export const api = {
   buscarAlimentos: (q: string) => request<Alimento[]>("GET", `/alimentos?q=${encodeURIComponent(q)}`),
   addRefeicaoTaco: (r: RefeicaoTacoIn) => request<unknown>("POST", "/refeicoes", r),
   diagnostico: () => request<Diagnostico>("GET", "/diagnostico"),
+  coachEnviar(mensagem: string, foto?: File | Blob | null, threadId?: string | null) {
+    const corpo = new FormData();
+    corpo.append("mensagem", mensagem);
+    if (foto) corpo.append("foto", foto, foto instanceof File ? foto.name : "foto.jpg");
+    if (threadId) corpo.append("thread_id", threadId);
+    return request<RespostaCoach>("POST", "/coach", corpo);
+  },
+  coachDecidir: (threadId: string, aprovar: boolean, motivo?: string) =>
+    request<RespostaCoach>(
+      "POST",
+      `/coach/${encodeURIComponent(threadId)}/decisao`,
+      motivo?.trim() ? { aprovar, motivo: motivo.trim() } : { aprovar },
+    ),
+  /** `null` quando a thread não existe ou não é do usuário (404): vira conversa nova. */
+  async coachHistorico(threadId: string): Promise<RespostaCoach | null> {
+    try {
+      return await request<RespostaCoach>("GET", `/coach/${encodeURIComponent(threadId)}`);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) return null;
+      throw e;
+    }
+  },
 };
+
+export const MSG_COTA_COACH = "Você usou todas as mensagens do coach de hoje. Volta amanhã!";
+export const MSG_COACH_FORA = "O coach está fora do ar agora. Registre manualmente e tente mais tarde.";
 
 /** Mensagem curta para mostrar ao usuário; `null` se foi só um redirecionamento. */
 export function mensagemDeErro(e: unknown): string | null {
   if (e instanceof Redirecionado) return null;
   if (e instanceof ApiError) {
-    if (e.status === 422) return "Confira os campos destacados.";
+    if (e.status === 429 && e.detail === "cota_do_coach") return MSG_COTA_COACH;
+    if (e.status === 503 && e.detail === "coach_indisponivel") return MSG_COACH_FORA;
+    if (e.status === 409 && e.detail === "aprovacao_pendente")
+      return "Responda o pedido acima (aprovar ou recusar) antes de mandar outra mensagem.";
+    if (e.status === 422) return typeof e.detail === "string" ? e.detail : "Confira os campos destacados.";
     if (e.status === 429) return "Muitas tentativas. Espere alguns minutos.";
     if (e.status >= 500) return "O servidor tropeçou. Tente de novo.";
     return typeof e.detail === "string" ? e.detail : e.message;

@@ -15,10 +15,10 @@ def test_migrate_cria_tabelas(tmp_path):
 
 def test_migrate_idempotente(tmp_path):
     conn = connect(str(tmp_path / "t.db"))
-    assert migrate(conn) == ["001_inicial.sql", "002_alimentos.sql"]
+    assert migrate(conn) == ["001_inicial.sql", "002_alimentos.sql", "003_coach.sql"]
     assert migrate(conn) == []
     versoes = [r["name"] for r in conn.execute("SELECT name FROM schema_version")]
-    assert versoes == ["001_inicial.sql", "002_alimentos.sql"]
+    assert versoes == ["001_inicial.sql", "002_alimentos.sql", "003_coach.sql"]
 
 
 def test_foreign_keys_ligadas(tmp_path):

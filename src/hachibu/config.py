@@ -13,6 +13,9 @@ class Settings:
     cookie_secure: bool = True
     # Pasta com o build do React (web/dist); None = só a API.
     static_dir: str | None = None
+    gemini_api_key: str | None = None
+    coach_modelo: str = "google_genai:gemini-3.6-flash"
+    coach_limite_diario: int = 60
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -27,4 +30,7 @@ class Settings:
             app_tz=os.environ.get("APP_TZ", "America/Sao_Paulo"),
             cookie_secure=os.environ.get("COOKIE_SECURE", "true").lower() != "false",
             static_dir=os.environ.get("STATIC_DIR") or None,
+            gemini_api_key=os.environ.get("GEMINI_API_KEY") or None,
+            coach_modelo=os.environ.get("COACH_MODELO", "google_genai:gemini-3.6-flash"),
+            coach_limite_diario=int(os.environ.get("COACH_LIMITE_DIARIO", "60")),
         )
