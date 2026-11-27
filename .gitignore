@@ -13,3 +13,5 @@ web/dist/
 .omc/
 .claude/worktrees/
 *.tsbuildinfo
+# semantic-release dry run output (CI)
+.next-version
