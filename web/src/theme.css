@@ -1,5 +1,5 @@
 /* Hachibu · tema A "Sutil": app escuro, 16-bit só nos detalhes.
-   Press Start 2P em rótulos, VT323 em números, Inter no texto. */
+   Press Start 2P em rótulos, VT323 em números, Oxanium (quadrada, com acentos) no texto. */
 
 @font-face {
   /* Recorte só com 腹八分 (1 KB): o kanji em pixel ao lado do nome. */
@@ -21,26 +21,26 @@
   font-display: swap;
 }
 @font-face {
-  font-family: "Inter";
-  src: url("/fonts/inter-latin-400-normal.woff2") format("woff2");
+  font-family: "Oxanium";
+  src: url("/fonts/oxanium-latin-400-normal.woff2") format("woff2");
   font-weight: 400;
   font-display: swap;
 }
 @font-face {
-  font-family: "Inter";
-  src: url("/fonts/inter-latin-500-normal.woff2") format("woff2");
+  font-family: "Oxanium";
+  src: url("/fonts/oxanium-latin-500-normal.woff2") format("woff2");
   font-weight: 500;
   font-display: swap;
 }
 @font-face {
-  font-family: "Inter";
-  src: url("/fonts/inter-latin-600-normal.woff2") format("woff2");
+  font-family: "Oxanium";
+  src: url("/fonts/oxanium-latin-600-normal.woff2") format("woff2");
   font-weight: 600;
   font-display: swap;
 }
 @font-face {
-  font-family: "Inter";
-  src: url("/fonts/inter-latin-700-normal.woff2") format("woff2");
+  font-family: "Oxanium";
+  src: url("/fonts/oxanium-latin-700-normal.woff2") format("woff2");
   font-weight: 700;
   font-display: swap;
 }
@@ -67,7 +67,7 @@
 
   --f-pixel: "Press Start 2P", ui-monospace, monospace;
   --f-num: "VT323", ui-monospace, monospace;
-  --f-texto: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-texto: "Oxanium", system-ui, -apple-system, "Segoe UI", sans-serif;
 
   --nav-altura: 64px;
   --seguro-baixo: env(safe-area-inset-bottom, 0px);
