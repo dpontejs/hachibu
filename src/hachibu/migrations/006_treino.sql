@@ -1,7 +1,6 @@
 ALTER TABLE profiles ADD COLUMN nivel_corrida TEXT;
 ALTER TABLE profiles ADD COLUMN corrida_quando TEXT;
 ALTER TABLE profiles ADD COLUMN corridas_semana INTEGER;
-ALTER TABLE profiles ADD COLUMN minutos_corrida INTEGER;
 CREATE TABLE planos (
     id INTEGER PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

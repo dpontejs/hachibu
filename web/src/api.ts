@@ -497,6 +497,8 @@ export const api = {
       throw e;
     }
   },
+  /** Recomeçar: tira o plano ativo (a versão fica no histórico). */
+  apagarPlano: () => request<unknown>("DELETE", "/plano"),
   coachConversas: () => request<{ conversas: ConversaCoach[] }>("GET", "/coach/conversas"),
   /** `null` quando a thread não existe ou não é do usuário (404): vira conversa nova. */
   async coachHistorico(threadId: string): Promise<RespostaCoach | null> {

@@ -3,7 +3,7 @@
 Não há rota que gere o plano: ele nasce da conversa com o coach (rascunho em código + proposta aprovada).
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 
 from hachibu.auth import UserId
 from hachibu.db import Db
@@ -11,7 +11,7 @@ from hachibu.memorias import listar as listar_memorias
 from hachibu.perfil import ler_perfil
 from hachibu.treino.exercicios import buscar, por_id
 from hachibu.treino.modelos import PlanoIn
-from hachibu.treino.repositorio import plano_ativo, semana_corrida
+from hachibu.treino.repositorio import desativar_plano, plano_ativo, semana_corrida
 from hachibu.treino.validador import corrida_efetiva, validar_plano
 
 router = APIRouter(prefix="/api")
@@ -66,6 +66,14 @@ def obter_plano(user_id: UserId, db: Db) -> dict:
         "avisos": validar_plano(plano, perfil, semana_corrida=semana),
         "tem_condicoes": condicoes or bool(perfil.condicoes_saude and perfil.condicoes_saude.strip()),
     }
+
+
+@router.delete("/plano", status_code=204)
+def apagar_plano(user_id: UserId, db: Db) -> Response:
+    """Recomeçar: o plano ativo sai (a versão fica no histórico) e o próximo nasce de nova conversa."""
+    if not desativar_plano(db, user_id):
+        raise HTTPException(404, "plano_inexistente")
+    return Response(status_code=204)
 
 
 @router.get("/exercicios")

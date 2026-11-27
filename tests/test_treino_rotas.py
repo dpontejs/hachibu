@@ -131,3 +131,24 @@ def test_banco_garante_um_plano_ativo_por_usuario(settings, aluno):
             "INSERT INTO planos (user_id, versao, origem, dados, criado_em, ativo) "
             "VALUES (1, 9, 'base', '{}', 'x', 1)"
         )
+
+
+def test_apagar_plano_desativa_e_mantem_o_historico(settings, aluno):
+    semear(settings, BASE)
+    assert aluno.delete("/api/plano").status_code == 204
+    assert plano(aluno).status_code == 404
+    with sqlite3.connect(settings.db_path) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM planos WHERE user_id = 1").fetchone()[0] == 1
+    assert semear(settings, BASE) == 2  # o próximo plano continua a numeração
+
+
+def test_apagar_sem_plano_404(aluno):
+    assert aluno.delete("/api/plano").status_code == 404
+
+
+def test_apagar_nao_mexe_no_plano_de_outro(settings, aluno, make_user):
+    semear(settings, BASE)
+    outro = make_user("b@x.com")
+    outro.put("/api/perfil", json=BASE)
+    assert outro.delete("/api/plano").status_code == 404
+    assert plano(aluno).status_code == 200

@@ -158,5 +158,24 @@ describe("Treino", () => {
     document.dispatchEvent(new Event("visibilitychange"));
     expect(await screen.findByText(/HOJE · TER/)).toBeInTheDocument();
   });
+
+  it("recomeçar pede confirmação, apaga o plano e volta para montar com o coach", async () => {
+    let temPlano = true;
+    const chamadas = servidor((u, init) => {
+      if (u === "/api/plano" && init?.method === "DELETE") {
+        temPlano = false;
+        return new Response(null, { status: 204 });
+      }
+      if (u === "/api/plano") return temPlano ? json(PLANO) : json({ detail: "plano_inexistente" }, 404);
+    });
+    vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const user = userEvent.setup();
+    renderTreino();
+    const botao = await screen.findByRole("button", { name: /recomeçar plano/i });
+    await user.click(botao);
+    expect(chamadas.some((c) => c.init?.method === "DELETE")).toBe(false);
+    await user.click(botao);
+    expect(await screen.findByRole("button", { name: /montar com o coach/i })).toBeInTheDocument();
+  });
 });
 

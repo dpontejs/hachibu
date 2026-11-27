@@ -25,3 +25,11 @@ def test_migrate_idempotente(tmp_path):
 def test_foreign_keys_ligadas(tmp_path):
     conn = connect(str(tmp_path / "t.db"))
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+
+
+def test_banco_que_ja_tinha_a_006_antiga_ganha_a_coluna_nova(tmp_path):
+    """Produção aplicou a 006 sem minutos_corrida: a 007 acrescenta a coluna sem refazer a 006."""
+    conn = connect(str(tmp_path / "t.db"))
+    migrate(conn)
+    colunas = {r["name"] for r in conn.execute("PRAGMA table_info(profiles)")}
+    assert "minutos_corrida" in colunas

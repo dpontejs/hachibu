@@ -67,6 +67,22 @@ export default function Treino() {
   const [erro, setErro] = useState<string | null>(null);
   const navegar = useNavigate();
   const pedir = (texto: string) => abrirCoachCom(texto, navegar);
+  const [apagando, setApagando] = useState(false);
+
+  async function recomecar() {
+    if (!window.confirm("Apagar o plano atual e montar outro com o coach? O atual fica guardado no histórico."))
+      return;
+    setApagando(true);
+    setErro(null);
+    try {
+      await api.apagarPlano();
+      await carregar();
+    } catch (e) {
+      setErro(mensagemDeErro(e));
+    } finally {
+      setApagando(false);
+    }
+  }
   const [hojeIdx, setHojeIdx] = useState(diaDeHoje);
 
   const carregar = useCallback(async () => {
@@ -205,6 +221,10 @@ export default function Treino() {
           ))}
         </ul>
       </section>
+
+      <button type="button" className="treino__recomecar" onClick={() => void recomecar()} disabled={apagando}>
+        {apagando ? "APAGANDO…" : "RECOMEÇAR PLANO"}
+      </button>
 
       {erro && (
         <p className="aviso" role="alert">
