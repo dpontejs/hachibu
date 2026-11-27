@@ -58,6 +58,19 @@ export default function Cerejeira() {
         fundo.width = W;
         fundo.height = H;
         const f = fundo.getContext("2d")!;
+        // Colinas ao fundo, em duas camadas.
+        const camadas: [string, number, number, number, number][] = [
+          ["#15181e", chao - 46, 14, 0.018, 1],
+          ["#171b21", chao - 26, 10, 0.03, 4],
+        ];
+        for (const [cor, base, amp, freq, fase] of camadas) {
+          f.fillStyle = cor;
+          for (let x = 0; x < W; x++) {
+            const y = Math.round(base - Math.sin(x * freq + fase) * amp - Math.sin(x * freq * 2.7) * amp * 0.3);
+            f.fillRect(x, y, 1, chao - y);
+          }
+        }
+        // Chão com grama, tufos e florzinhas.
         f.fillStyle = "#0e1014";
         f.fillRect(0, chao, W, 8);
         for (let x = 0; x < W; x++) {
@@ -65,12 +78,36 @@ export default function Cerejeira() {
             f.fillStyle = "#1d3b29";
             f.fillRect(x, chao - 1, 1, 1);
           }
+          if ((x * 13) % 17 === 0) {
+            f.fillStyle = "#2f5e3f";
+            f.fillRect(x, chao - 3, 1, 2);
+            f.fillRect(x + 1, chao - 2, 1, 1);
+            f.fillRect(x - 1, chao - 2, 1, 1);
+          }
+          if ((x * 29) % 53 === 0) {
+            f.fillStyle = "#9ff2b9";
+            f.fillRect(x, chao - 3, 1, 1);
+          }
         }
         // No celular a árvore fica centralizada no alto; no computador, à direita, com outra ao fundo.
         const ax = retrato ? Math.round((W - arvore.width) / 2) : W - arvore.width - 18;
         const ay = retrato ? Math.round(H * 0.08) : chao - arvore.height + 2;
         if (!retrato) f.drawImage(fundoArvore, Math.round(W * 0.42), chao - fundoArvore.height + 6);
         f.drawImage(arvore, ax, ay);
+        // Montinho de pétalas ao pé da árvore.
+        const base = retrato ? ay + arvore.height : chao;
+        for (let i = 0; i < 70; i++) {
+          const x = ax + 40 + Math.random() * 90;
+          if (Math.random() > Math.abs(x - (ax + 85)) / 45) {
+            f.fillStyle = TONS[i % 2];
+            f.fillRect(Math.round(x), base - 1 - (Math.random() < 0.3 ? 1 : 0), 1, 1);
+          }
+        }
+        const vagalumes = Array.from({ length: retrato ? 5 : 9 }, () => ({
+          x: Math.random() * W * (retrato ? 1 : 0.6),
+          y: 15 + Math.random() * H * 0.5,
+          fase: Math.random() * 6.3,
+        }));
         const copa = { x0: ax + 10, x1: ax + arvore.width - 10, y0: ay + 10, y1: ay + arvore.height * 0.55 };
         const limiteChao = retrato ? ay + arvore.height : chao;
 
@@ -89,6 +126,20 @@ export default function Cerejeira() {
         const quadro = () => {
           ctx.clearRect(0, 0, W, H);
           ctx.drawImage(fundo, 0, 0);
+          for (const v of vagalumes) {
+            const brilho = (Math.sin(t * 0.02 + v.fase) + 1) / 2;
+            if (brilho > 0.55) {
+              ctx.globalAlpha = (brilho - 0.55) * 2.2;
+              ctx.fillStyle = "#d6ffe2";
+              ctx.fillRect(
+                Math.round(v.x + Math.sin(t * 0.005 + v.fase) * 6),
+                Math.round(v.y + Math.cos(t * 0.004 + v.fase) * 3),
+                1,
+                1,
+              );
+              ctx.globalAlpha = 1;
+            }
+          }
           const vento = 0.12 + Math.sin(t * 0.004) * 0.1 + Math.max(0, Math.sin(t * 0.0013)) ** 8 * 0.6;
           for (const p of petalas) {
             if (!reduz && !p.pousada) {

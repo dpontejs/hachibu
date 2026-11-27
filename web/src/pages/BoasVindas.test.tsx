@@ -28,12 +28,34 @@ describe("BoasVindas", () => {
         <BoasVindas />
       </MemoryRouter>,
     );
-    expect(screen.getByText(/hara hachi bu/i)).toBeInTheDocument();
-    expect(screen.getByText("腹八分")).toBeInTheDocument();
+    expect(screen.getAllByText(/hara hachi bu/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("腹八分").length).toBe(2); // ao lado do nome e na seção da história
     expect(screen.getByRole("link", { name: /infallible/i })).toHaveAttribute(
       "href",
       "https://infallible.itch.io/pack-of-sakura-trees",
     );
+  });
+});
+
+describe("BoasVindas: conteúdo", () => {
+  it("explica o app em seções: como funciona, o que faz, em breve, instalar, dados e nome", () => {
+    render(
+      <MemoryRouter>
+        <BoasVindas />
+      </MemoryRouter>,
+    );
+    const secoes = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+    expect(secoes).toEqual([
+      "COMO FUNCIONA",
+      "O QUE ELE FAZ",
+      "EM BREVE",
+      "NO SEU CELULAR",
+      "SEUS DADOS",
+      "DE ONDE VEM O NOME",
+      "PRONTO PARA COMECAR?",
+    ]);
+    expect(screen.getByText(/Adicionar à Tela de Início/)).toBeInTheDocument();
+    expect(screen.getByText(/fotos não são guardadas/i)).toBeInTheDocument();
   });
 });
 

@@ -2,6 +2,13 @@
    Press Start 2P em rótulos, VT323 em números, Inter no texto. */
 
 @font-face {
+  /* Recorte só com 腹八分 (1 KB): o kanji em pixel ao lado do nome. */
+  font-family: "DotGothic16";
+  src: url("/fonts/dotgothic16-hachibu.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
   font-family: "Press Start 2P";
   src: url("/fonts/press-start-2p-latin-400-normal.woff2") format("woff2");
   font-weight: 400;
@@ -1982,11 +1989,26 @@ input[type="number"] {
   transform: translateY(-50%);
   max-width: 42%;
 }
-.landing__nome {
+.landing__logo {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.45em;
+  flex-wrap: wrap;
   font-size: clamp(24px, 3.4vw, 40px);
+  font-weight: 400;
+}
+.landing__nome {
+  color: #fff;
   letter-spacing: 1px;
   text-shadow: 3px 3px 0 #0b0c10;
-  margin: 0;
+}
+.landing__kanji-logo {
+  font-family: "DotGothic16", "Hiragino Sans", "Noto Sans JP", sans-serif;
+  font-size: 1.05em;
+  color: var(--acento);
+  letter-spacing: 2px;
+  text-shadow: 3px 3px 0 #0b0c10;
 }
 .landing__lema {
   margin: 18px 0 0;
@@ -2047,7 +2069,7 @@ input[type="number"] {
   margin-top: 12px;
 }
 .landing__kanji {
-  font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans CJK JP", "Noto Sans JP", "Yu Gothic",
+  font-family: "DotGothic16", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans CJK JP", "Noto Sans JP", "Yu Gothic",
     "Meiryo", sans-serif;
   font-size: 44px;
   color: var(--acento) !important;
@@ -2082,4 +2104,80 @@ input[type="number"] {
 .carregando-app {
   min-height: 100svh;
   background: var(--bg);
+}
+
+.landing__passos {
+  list-style: none;
+  padding: 0;
+  margin: 18px 0 0;
+  display: grid;
+  gap: 14px;
+}
+.landing__passo {
+  display: flex;
+  gap: 16px;
+  background: var(--card);
+  border-radius: var(--raio);
+  padding: 18px;
+}
+.landing__numero {
+  font-size: 40px;
+  line-height: 1;
+  color: var(--acento);
+  min-width: 26px;
+}
+.landing__passo h3 {
+  margin: 2px 0 8px;
+  font-size: 17px;
+}
+.landing__passo p,
+.landing__colunas p,
+.landing__final p,
+.landing__lista li {
+  margin: 0;
+  color: #c3c7d2;
+  line-height: 1.6;
+}
+.landing__recursos--breve .landing__recurso {
+  background: transparent;
+  border: 1px dashed var(--trilho);
+}
+.landing__recursos--breve .landing__recurso h3 {
+  color: var(--mudo);
+}
+.landing__colunas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 32px;
+}
+.landing__colunas p {
+  margin-top: 14px;
+}
+.landing__lista {
+  margin: 14px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 10px;
+}
+.landing__lista strong {
+  color: var(--texto);
+}
+.landing__final {
+  text-align: center;
+}
+.landing__final p {
+  margin-top: 14px;
+}
+.landing__final .landing__ctas {
+  justify-content: center;
+}
+
+.landing__kanji-texto {
+  font-family: "DotGothic16", "Hiragino Sans", "Noto Sans JP", sans-serif;
+  color: var(--acento);
+}
+@media (min-width: 760px) {
+  .landing__recursos--seis {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
