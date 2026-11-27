@@ -26,6 +26,10 @@ const FRASES: Record<string, string> = {
   "skill:nutricao": "Consultando o guia de nutrição…",
   "skill:musculacao": "Consultando o guia de musculação…",
   "skill:corrida": "Consultando o guia de corrida…",
+  rascunho_plano: "Montando um rascunho do seu plano…",
+  ler_plano: "Lendo seu plano de treino…",
+  buscar_exercicio: "Procurando exercícios…",
+  propor_plano: "Preparando a proposta do plano…",
 };
 
 export function frasePasso(ferramenta: string | null): string {

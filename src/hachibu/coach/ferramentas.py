@@ -19,6 +19,13 @@ from hachibu.diario import (
 )
 from hachibu.metas import PISO_KCAL, Metas, calcular_metas, diagnostico, gasto_diario
 from hachibu.perfil import ler_perfil as _ler_perfil
+from hachibu.treino.base import gerar_plano_base
+from hachibu.treino.diferencas import diferencas
+from hachibu.treino.exercicios import buscar as buscar_no_catalogo
+from hachibu.treino.exercicios import por_id
+from hachibu.treino.modelos import PlanoIn
+from hachibu.treino.repositorio import gravar_plano, plano_ativo, semana_corrida
+from hachibu.treino.validador import validar_plano
 
 FUSO = "America/Sao_Paulo"
 DEFICIT_MAXIMO = 0.25
@@ -190,3 +197,68 @@ def esquecer_gosto(db, user_id: int, id_: int) -> dict:
             "Diga isso a ele e continue respeitando a restrição."
         )
     raise ErroFerramenta(f"não existe memória #{id_}. Confira os ids no bloco do aluno.")
+
+
+# ---------- treino ----------
+
+
+def _legenda(plano: PlanoIn) -> dict[str, str]:
+    return {
+        e.exercicio_id: (ex.nome if (ex := por_id(e.exercicio_id)) else e.exercicio_id)
+        for d in plano.dias
+        for e in d.exercicios
+    }
+
+
+def rascunho_plano(db, user_id: int) -> dict:
+    """Plano base em código a partir do perfil, com os pontos que não seguiram a preferência do aluno."""
+    plano, pontos = gerar_plano_base(_perfil(db, user_id))
+    return {"plano": plano.model_dump(), "legenda": _legenda(plano), "pontos": pontos}
+
+
+def ler_plano(db, user_id: int) -> dict:
+    ativo = plano_ativo(db, user_id)
+    if ativo is None:
+        raise ErroFerramenta(
+            "o aluno ainda não tem plano de treino. Use rascunho_plano para começar a conversa."
+        )
+    meta, plano = ativo
+    semana = semana_corrida(db, user_id)
+    return {
+        "versao": meta["versao"],
+        "plano": plano.model_dump(),
+        "legenda": _legenda(plano),
+        "semana_corrida": semana,
+        "avisos": validar_plano(plano, _perfil(db, user_id), semana_corrida=semana),
+    }
+
+
+def buscar_exercicio(db, user_id: int, termo: str) -> list[dict]:
+    equipamento = _perfil(db, user_id).equipamento
+    return [
+        {"id": e.id, "nome": e.nome, "grupo": e.grupo}
+        for e in buscar_no_catalogo(termo)
+        if equipamento in e.equipamentos
+    ][:15]
+
+
+def validar_proposta(db, user_id: int, plano: PlanoIn) -> list[str]:
+    """Valida contra o perfil atual e o plano ativo; devolve as mudanças que o aluno vai ver no card."""
+    perfil = _perfil(db, user_id)
+    ativo = plano_ativo(db, user_id)
+    anterior = ativo[1] if ativo else None
+    semana = semana_corrida(db, user_id)
+    erros = sorted(
+        {e for s in (semana, 9) for e in validar_plano(plano, perfil, anterior=anterior, semana_corrida=s)}
+    )
+    if erros:
+        raise ErroFerramenta("a proposta não passa nas regras do plano: " + " | ".join(erros))
+    mudancas = diferencas(anterior, plano)
+    if not mudancas:
+        raise ErroFerramenta("nada muda em relação ao plano atual. Confira o que o aluno pediu.")
+    return mudancas
+
+
+def aplicar_plano(db, user_id: int, plano: PlanoIn) -> dict:
+    validar_proposta(db, user_id, plano)  # o perfil pode ter mudado entre a proposta e a aprovação
+    return {"versao": gravar_plano(db, user_id, plano, "coach")}

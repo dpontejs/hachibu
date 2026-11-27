@@ -2507,3 +2507,13 @@ input[type="number"] {
   padding-left: 18px;
   font-size: 14px;
 }
+.aprovacao__mudancas {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  max-height: 260px;
+  overflow-y: auto;
+}

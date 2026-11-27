@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import Coach, { CHAVE_THREAD, nomeFerramenta } from "./Coach";
+import Coach, { CHAVE_THREAD, frasePasso, nomeFerramenta } from "./Coach";
 import { EVENTO_MENSAGEM } from "./abrir";
 
 function json(body: unknown, status = 200): Response {
@@ -670,6 +670,37 @@ describe("Coach", () => {
     renderCoach();
     window.dispatchEvent(new CustomEvent(EVENTO_MENSAGEM, { detail: "Ajusta meu plano" }));
     expect(await screen.findByDisplayValue("Ajusta meu plano")).toBeInTheDocument();
+  });
+
+  it("proposta de plano mostra o motivo e só o que muda", async () => {
+    localStorage.setItem(CHAVE_THREAD, "t-p");
+    mockFetch((u) =>
+      u === "/api/coach/t-p"
+        ? json({
+            thread_id: "t-p",
+            mensagens: [{ papel: "usuario", texto: "troca o leg press", ferramentas: [] }],
+            pendente: {
+              ferramenta: "propor_plano",
+              args: {
+                justificativa: "Você não gosta de leg press.",
+                mudancas: ["sexta: Leg press → Agachamento goblet (3×8–12)"],
+              },
+              descricao: "Plano de treino: 1 mudança(s).",
+            },
+          })
+        : undefined,
+    );
+    renderCoach();
+    const card = await screen.findByRole("region", { name: /proposta de plano/i });
+    expect(within(card).getByText("Você não gosta de leg press.")).toBeInTheDocument();
+    const lista = within(card).getByRole("list", { name: /mudanças/i });
+    expect(within(lista).getByText("sexta: Leg press → Agachamento goblet (3×8–12)")).toBeInTheDocument();
+  });
+
+  it("frases dos passos do plano de treino", () => {
+    expect(frasePasso("rascunho_plano")).toMatch(/rascunho/i);
+    expect(frasePasso("propor_plano")).toMatch(/proposta/i);
+    expect(frasePasso("buscar_exercicio")).toMatch(/exerc/i);
   });
 });
 
