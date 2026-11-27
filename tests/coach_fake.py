@@ -8,6 +8,12 @@ from hachibu.coach.foto import ItensFoto
 
 class ModeloFalso(GenericFakeChatModel):
     itens_foto: list = []
+    # Cada chamada guarda as mensagens que o modelo recebeu (inclui o prompt de sistema).
+    recebidas: list = []
+
+    def _generate(self, messages, *args, **kwargs):
+        self.recebidas.append(list(messages))
+        return super()._generate(messages, *args, **kwargs)
 
     def bind_tools(self, tools, **kwargs):
         return self
@@ -29,4 +35,4 @@ def chamada(nome: str, args: dict | None = None, id_: str = "c1") -> AIMessage:
 
 def roteiro(*respostas, itens_foto=None) -> ModeloFalso:
     msgs = [AIMessage(content=r) if isinstance(r, str) else r for r in respostas]
-    return ModeloFalso(messages=iter(msgs), itens_foto=itens_foto or [])
+    return ModeloFalso(messages=iter(msgs), itens_foto=itens_foto or [], recebidas=[])

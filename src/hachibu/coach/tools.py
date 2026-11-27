@@ -7,6 +7,7 @@ import json
 import logging
 from collections.abc import Callable
 from datetime import datetime
+from typing import Literal
 
 from langchain_core.tools import BaseTool, tool
 from langgraph.types import interrupt
@@ -125,6 +126,20 @@ def criar_tools(
         )
 
     @tool
+    def lembrar(tipo: Literal["restricao", "condicao", "gosto"], texto: str) -> str:
+        """Grava algo que o aluno declarou sobre si, para lembrar em todas as conversas.
+        tipo: "restricao" (alimentar ou de saúde: celíaco, alergia, vegetariano, intolerância),
+        "condicao" (física: lesão, dor, deficiência, gestação) ou "gosto" (do que gosta ou não, em comida
+        e em treino). texto: frase curta na 3ª pessoa, ex.: "não gosta de azeitona". Repetir não duplica."""
+        return rodar(f.lembrar, tipo, texto)
+
+    @tool
+    def esquecer_gosto(id: int) -> str:
+        """Apaga um gosto que o aluno disse ter mudado (use o #id do bloco do aluno). Restrições e
+        condições não podem ser apagadas pelo coach: só o aluno remove, na tela Perfil."""
+        return rodar(f.esquecer_gosto, id)
+
+    @tool
     def analisar_foto_refeicao() -> str:
         """Analisa a foto de prato anexada à mensagem atual: lista os alimentos com gramas estimadas, já
         casados com a TACO (alimento_id e kcal). Não registra nada: mostre a lista ao aluno e só chame
@@ -150,5 +165,7 @@ def criar_tools(
         registrar_agua,
         ajustar_metas,
         analisar_foto_refeicao,
+        lembrar,
+        esquecer_gosto,
         criar_tool_carregar_skill(),
     ]

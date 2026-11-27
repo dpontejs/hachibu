@@ -6,6 +6,7 @@ o modelo nunca escolhe o usuário. Erro de uso vira ErroFerramenta com mensagem 
 
 from datetime import datetime
 
+from hachibu import memorias
 from hachibu.alimentos import buscar_alimentos
 from hachibu.diario import (
     MACROS,
@@ -162,3 +163,29 @@ def aplicar_ajuste_metas(
         (metas.kcal, metas.proteina_g, metas.carbo_g, metas.gordura_g, agora.isoformat(), user_id),
     )
     return metas.model_dump()
+
+
+def lembrar(db, user_id: int, tipo: str, texto: str) -> dict:
+    texto = " ".join(texto.split())
+    if not 2 <= len(texto) <= 200:
+        raise ErroFerramenta("o texto da memória precisa ter de 2 a 200 caracteres.")
+    try:
+        memoria, criada = memorias.criar(db, user_id, tipo, texto, "coach")
+    except memorias.LimiteDeMemorias:
+        raise ErroFerramenta(
+            f"o aluno já tem {memorias.LIMITE} memórias. Peça para ele revisar a lista na tela Perfil."
+        ) from None
+    return {"lembrado": memoria.model_dump(), "ja_existia": not criada}
+
+
+def esquecer_gosto(db, user_id: int, id_: int) -> dict:
+    memoria = memorias.apagar(db, user_id, id_, so_gostos=True)
+    if memoria is None:
+        existe = any(m.id == id_ for m in memorias.listar(db, user_id))
+        if existe:
+            raise ErroFerramenta(
+                "restrições e condições físicas só o próprio aluno remove, na tela Perfil. "
+                "Diga isso a ele e continue respeitando a restrição."
+            )
+        raise ErroFerramenta(f"não existe memória #{id_}. Confira os ids no bloco do aluno.")
+    return {"esquecido": memoria.model_dump()}

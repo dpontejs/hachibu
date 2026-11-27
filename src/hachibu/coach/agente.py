@@ -17,10 +17,13 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.errors import GraphRecursionError
 from langgraph.types import Command
 
-from hachibu.coach.prompts import sistema
+from hachibu.coach.prompts import bloco_do_aluno, sistema
 from hachibu.coach.skills import catalogo_skills
 from hachibu.coach.tools import criar_tools
 from hachibu.config import Settings
+from hachibu.db import connect
+from hachibu.memorias import listar as listar_memorias
+from hachibu.perfil import ler_perfil
 
 MARCA_FOTO = "\n\n[o aluno anexou uma foto: use analisar_foto_refeicao]"
 # Teto de passos do grafo por mensagem (cada volta modelo → tools são 2 passos): limita o gasto da chave
@@ -65,12 +68,22 @@ def _checkpointer(settings: Settings) -> SqliteSaver:
         return _savers[caminho]
 
 
+def _bloco_do_aluno(settings: Settings, user_id: int) -> str:
+    """Lido a cada mensagem: o que o aluno contou em qualquer conversa vale em todas."""
+    db = connect(settings.db_path)
+    try:
+        perfil = ler_perfil(db, user_id)
+        return bloco_do_aluno(listar_memorias(db, user_id), perfil.condicoes_saude if perfil else None)
+    finally:
+        db.close()
+
+
 def _agente(settings: Settings, modelo, user_id: int, agora: Callable[[], datetime], foto=None):
     tools = criar_tools(settings.db_path, user_id, agora, foto=foto, visao=modelo)
     return create_agent(
         modelo,
         tools=tools,
-        system_prompt=sistema(catalogo_skills(), agora()),
+        system_prompt=sistema(catalogo_skills(), agora(), _bloco_do_aluno(settings, user_id)),
         checkpointer=_checkpointer(settings),
     )
 

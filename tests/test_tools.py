@@ -29,6 +29,8 @@ def test_tools_sem_user_id_no_schema(tools):
         "ler_diagnostico",
         "ajustar_metas",
         "carregar_skill",
+        "lembrar",
+        "esquecer_gosto",
     } <= set(tools)
 
 
@@ -57,3 +59,42 @@ def test_carregar_skill():
     assert "10%" in t.invoke({"nome": "corrida"})
     r = t.invoke({"nome": "yoga"})
     assert r.startswith("erro:") and "corrida" in r
+
+
+def memorias_do(settings):
+    from hachibu.db import connect
+    from hachibu.memorias import listar
+
+    return listar(connect(settings.db_path), 1)
+
+
+def test_lembrar_grava_com_origem_coach(settings, tools):
+    r = tools["lembrar"].invoke({"tipo": "gosto", "texto": "não gosta de azeitona"})
+    assert not r.startswith("erro")
+    [m] = memorias_do(settings)
+    assert (m.tipo, m.texto, m.origem) == ("gosto", "não gosta de azeitona", "coach")
+    tools["lembrar"].invoke({"tipo": "gosto", "texto": "Não gosta de  azeitona"})
+    assert len(memorias_do(settings)) == 1
+
+
+def test_coach_nao_apaga_restricao(settings, tools):
+    tools["lembrar"].invoke({"tipo": "restricao", "texto": "celíaco"})
+    tools["lembrar"].invoke({"tipo": "condicao", "texto": "dor no joelho direito"})
+    restricao, condicao = memorias_do(settings)
+    for m in (restricao, condicao):
+        r = tools["esquecer_gosto"].invoke({"id": m.id})
+        assert r.startswith("erro") and "Perfil" in r
+    assert len(memorias_do(settings)) == 2
+
+
+def test_coach_apaga_gosto(settings, tools):
+    tools["lembrar"].invoke({"tipo": "gosto", "texto": "não gosta de azeitona"})
+    [m] = memorias_do(settings)
+    assert not tools["esquecer_gosto"].invoke({"id": m.id}).startswith("erro")
+    assert memorias_do(settings) == []
+
+
+def test_lembrar_acima_do_limite_vira_erro(settings, tools):
+    for i in range(60):
+        tools["lembrar"].invoke({"tipo": "gosto", "texto": f"gosto {i}"})
+    assert tools["lembrar"].invoke({"tipo": "gosto", "texto": "mais um"}).startswith("erro")

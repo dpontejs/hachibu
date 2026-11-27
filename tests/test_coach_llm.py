@@ -76,3 +76,17 @@ def test_pergunta_mista_carrega_skills(c):
     corpo = falar(c, "amanhã cedo vou fazer um longão de 15 km, o que como hoje no jantar?")
     usadas = corpo["mensagens"][-1]["ferramentas"]
     assert any(u.startswith("skill:") for u in usadas)
+
+
+def test_memoria_azeitona_vale_em_outra_conversa(c):
+    falar(c, "Não gosto de azeitona.")
+    memorias = c.get("/api/memorias").json()["memorias"]
+    assert any("azeitona" in m["texto"].lower() and m["tipo"] == "gosto" for m in memorias), memorias
+    resposta = falar(c, "Eu gosto de azeitona?")["mensagens"][-1]["texto"].lower()
+    assert "não" in resposta
+
+
+def test_memoria_celiaco_vira_restricao(c):
+    falar(c, "Sou celíaco.")
+    memorias = c.get("/api/memorias").json()["memorias"]
+    assert any(m["tipo"] == "restricao" for m in memorias), memorias
