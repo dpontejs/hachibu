@@ -1,5 +1,6 @@
-== Inter ==
-Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter) Inter-Italic[opsz,wght].ttf: Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)
+== Oxanium ==
+(oxanium-latin-{400,500,600,700}-normal.woff2, de @fontsource/oxanium 5.3.0)
+Copyright 2019 The Oxanium Project Authors (https://github.com/sevmeyer/oxanium)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
@@ -92,6 +93,8 @@ INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
 DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
+
+
 == Press Start 2P ==
 Copyright 2012 The Press Start 2P Project Authors (cody@zone38.net), with Reserved Font Name "Press Start 2P"
 
@@ -282,7 +285,8 @@ FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
 
 ----------------------------------------------------------------------
-DotGothic16 (recorte só com 腹八分, dotgothic16-hachibu.woff2)
+== DotGothic16 ==
+(recorte só com 腹八分, dotgothic16-hachibu.woff2)
 Copyright 2020 The DotGothic16 Project Authors (Fontworks Inc.)
 SIL Open Font License, Version 1.1 — https://openfontlicense.org
 Fonte: Google Fonts (https://fonts.google.com/specimen/DotGothic16)
