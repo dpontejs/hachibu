@@ -42,6 +42,7 @@ def montar_semana(plano: PlanoIn, semana: int) -> list[dict]:
                 "nome": dia.nome,
                 "exercicios": exercicios,
                 "corrida": corrida.model_dump() if corrida else None,
+                "cardio": dia.cardio.model_dump() if dia.cardio else None,
             }
         )
     return dias

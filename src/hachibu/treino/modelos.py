@@ -53,6 +53,29 @@ class CardioPlano(BaseModel):
 
 class DiaPlano(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _recuperacao_antiga(cls, dados):
+        """Planos gravados antes do cardio guardavam a recuperação como tipo de corrida: vira cardio leve.
+
+        As versões são fotos imutáveis no banco, então o formato antigo precisa continuar legível.
+        """
+        if isinstance(dados, dict):
+            corrida = dados.get("corrida")
+            if isinstance(corrida, dict) and corrida.get("tipo") == "recuperacao":
+                dados = {
+                    **dados,
+                    "corrida": None,
+                    "cardio": dados.get("cardio")
+                    or {
+                        "modalidade": "caminhada",
+                        "duracao_min": corrida.get("duracao_min", 30),
+                        "intensidade": "leve",
+                    },
+                }
+        return dados
+
     dia: int = Field(ge=0, le=6)  # 0 = segunda
     nome: str = Field(max_length=40)
     exercicios: list[ExercicioPlano] = Field(default_factory=list, max_length=15)

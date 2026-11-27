@@ -152,3 +152,35 @@ def test_apagar_nao_mexe_no_plano_de_outro(settings, aluno, make_user):
     outro.put("/api/perfil", json=BASE)
     assert outro.delete("/api/plano").status_code == 404
     assert plano(aluno).status_code == 200
+
+
+def test_plano_gravado_com_recuperacao_antiga_continua_legivel(settings, aluno):
+    """Planos aprovados antes do cardio tinham a recuperação como tipo de corrida: viram cardio leve."""
+    import json
+
+    dias = [{"dia": i, "nome": "Descanso", "exercicios": [], "corrida": None} for i in range(7)]
+    dias[6] = {
+        "dia": 6,
+        "nome": "Recuperação",
+        "exercicios": [],
+        "corrida": {
+            "progressao": False,
+            "tipo": "recuperacao",
+            "duracao_min": 30,
+            "corre_min": None,
+            "anda_min": None,
+            "repeticoes": None,
+            "esforco_alvo": "1-3",
+        },
+    }
+    with sqlite3.connect(settings.db_path) as conn:
+        conn.execute(
+            "INSERT INTO planos (user_id, versao, origem, dados, criado_em, ativo) "
+            "VALUES (1, 1, 'coach', ?, 'x', 1)",
+            (json.dumps({"dias": dias}),),
+        )
+    r = plano(aluno)
+    assert r.status_code == 200
+    domingo = r.json()["dias"][6]
+    assert domingo["corrida"] is None
+    assert domingo["cardio"] == {"modalidade": "caminhada", "duracao_min": 30, "intensidade": "leve"}
