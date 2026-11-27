@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
-import { api, ApiError, ConexaoPerdida, mensagemDeErro, type ConversaCoach, type MensagemCoach, type PendenciaCoach, type RespostaCoach } from "../api";
+import { api, ApiError, ConexaoPerdida, mensagemDeErro, Redirecionado, type ConversaCoach, type MensagemCoach, type PendenciaCoach, type RespostaCoach } from "../api";
 import { Icone } from "../ui";
 import { EVENTO_FOTO, gravarThread, lerThread } from "./abrir";
 import Aprovacao from "./Aprovacao";
@@ -185,6 +185,30 @@ interface Envio {
   previa: string | null;
 }
 
+/** O que foi enviado, para devolver à caixa se o coach não chegar a responder. */
+interface Enviado {
+  mensagem: string;
+  digitado: string;
+  sugestao: boolean;
+  foto: File | null;
+  previa: string | null;
+}
+
+/** A conversa tem a mensagem enviada e algo do coach depois dela (resposta ou proposta)? */
+function respondida(r: RespostaCoach, mensagem: string): boolean {
+  const i = r.mensagens.map((m) => m.papel === "usuario" && m.texto === mensagem).lastIndexOf(true);
+  if (i < 0) return false;
+  return r.pendente !== null || r.mensagens.slice(i + 1).some((m) => m.papel === "coach");
+}
+
+/** Vale tentar de novo: sem rede, ou o proxy no meio de um deploy. */
+function transitorio(e: unknown): boolean {
+  return !(e instanceof ApiError) || e.status === 502 || e.status === 504;
+}
+
+const SEM_SINAL_MS = 60_000; // sem nem a batida de 15 s: a conexão morreu
+const FORA_MS = 20_000; // voltou do segundo plano e o stream está mudo há mais que isso
+
 /**
  * O coach: o mesmo componente no painel do desktop e em /coach no celular.
  * A conversa vive no servidor; aqui só fica o `thread_id` (localStorage).
@@ -210,7 +234,8 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
   /** A resposta se perdeu no caminho (rede, app em segundo plano): esperando pelo histórico. */
   const [aguardando, setAguardando] = useState(false);
   const abortar = useRef<AbortController | null>(null);
-  const escondidoEm = useRef<number | null>(null);
+  const ultimoSinal = useRef(0);
+  const montado = useRef(true);
   /** `null`: painel na conversa; lista: painel mostrando as conversas anteriores. */
   const [conversas, setConversas] = useState<ConversaCoach[] | null>(null);
   const [listando, setListando] = useState(false);
@@ -230,9 +255,16 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
     setPendente(r.pendente);
   }, []);
 
+  /** Devolve texto e foto à caixa quando o coach não chegou a responder. */
+  function devolver(e: Enviado) {
+    if (!e.sugestao) setTexto(e.digitado);
+    setFoto(e.foto);
+    setPrevia(e.previa);
+  }
+
   /** Consulta o histórico até o servidor terminar a resposta (ou desistir em 3 min). */
   const recuperar = useCallback(
-    async (id: string, acabouDeConsultar = false) => {
+    async (id: string, acabouDeConsultar = false, enviado?: Enviado) => {
       const minha = ++geracao.current;
       const vivo = () => geracao.current === minha;
       setAguardando(true);
@@ -244,25 +276,39 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
           const r = await api.coachHistorico(id);
           if (!vivo()) return;
           if (!r) {
-            // O pedido nem chegou ao servidor: segue como conversa nova.
+            // O pedido nem chegou ao servidor: segue como conversa nova, com o texto de volta na caixa.
             gravarThread(null);
             setThreadId(null);
             setAguardando(false);
-            setErro("A mensagem não chegou ao coach. Tente de novo.");
+            setErro("A mensagem não chegou ao coach. Ela voltou para a caixa: tente de novo.");
+            if (enviado) devolver(enviado);
             return;
           }
           if (!r.processando) {
             aplicar(r);
             setAguardando(false);
+            if (enviado && !respondida(r, enviado.mensagem)) {
+              setErro("O coach não chegou a responder. A mensagem voltou para a caixa: tente de novo.");
+              devolver(enviado);
+            } else if (enviado) soltarPrevia(enviado.previa);
             return;
           }
           if (r.mensagens.length) setMensagens(r.mensagens);
-        } catch {
-          // Ainda sem rede: tenta de novo no próximo ciclo.
+        } catch (e) {
+          if (!vivo()) return;
+          if (e instanceof Redirecionado) return;
+          if (!transitorio(e)) {
+            // Sessão, coach fora do ar etc.: insistir não resolve.
+            setAguardando(false);
+            setErro(mensagemDeErro(e));
+            if (enviado) devolver(enviado);
+            return;
+          }
         }
         if (Date.now() > limite) {
           setAguardando(false);
           setErro("O coach está demorando demais. Abra a conversa de novo daqui a pouco.");
+          if (enviado) devolver(enviado);
           return;
         }
         await esperar(INTERVALO_RECUPERAR_MS);
@@ -303,24 +349,32 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
   useEffect(() => {
     if (!esperando) return;
     setAgora(Date.now());
-    const t = window.setInterval(() => setAgora(Date.now()), 1000);
+    const t = window.setInterval(() => {
+      setAgora(Date.now());
+      if (abortar.current && Date.now() - ultimoSinal.current > SEM_SINAL_MS) abortar.current.abort();
+    }, 1000);
     return () => window.clearInterval(t);
   }, [esperando]);
 
   // App voltou do segundo plano no meio de uma resposta: o iOS pode ter matado a conexão sem avisar.
-  // Corta o stream e passa a buscar pelo histórico.
+  // Se o stream está mudo (nem a batida de 15 s chegou), corta e passa a buscar pelo histórico.
   useEffect(() => {
     function mudou() {
-      if (document.visibilityState === "hidden") {
-        escondidoEm.current = Date.now();
-        return;
-      }
-      const fora = escondidoEm.current ? Date.now() - escondidoEm.current : 0;
-      escondidoEm.current = null;
-      if (fora > 3000) abortar.current?.abort();
+      if (document.visibilityState === "visible" && Date.now() - ultimoSinal.current > FORA_MS)
+        abortar.current?.abort();
     }
     document.addEventListener("visibilitychange", mudou);
     return () => document.removeEventListener("visibilitychange", mudou);
+  }, []);
+
+  // Saiu da tela (no celular o coach é uma rota): nada desta instância mexe mais na conversa salva.
+  useEffect(() => {
+    montado.current = true;
+    return () => {
+      montado.current = false;
+      geracao.current++;
+      abortar.current?.abort();
+    };
   }, []);
 
   useEffect(() => {
@@ -421,35 +475,53 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
     }
     setPasso(null);
     setPassoEm(Date.now());
+    ultimoSinal.current = Date.now();
     const controle = new AbortController();
     abortar.current = controle;
+    const enviado: Enviado = {
+      mensagem,
+      digitado,
+      sugestao: sugestao !== undefined,
+      foto: fotoEnviada,
+      previa: previaEnviada,
+    };
     try {
-      const aoPasso = (f: string) => {
-        setPasso(f);
-        setPassoEm(Date.now());
-      };
-      aplicar(await api.coachEnviar(mensagem, fotoEnviada, id, aoPasso, controle.signal));
+      const r = await api.coachEnviar(mensagem, fotoEnviada, id, {
+        aoPasso: (f) => {
+          setPasso(f);
+          setPassoEm(Date.now());
+        },
+        aoSinal: () => {
+          ultimoSinal.current = Date.now();
+        },
+        sinal: controle.signal,
+      });
+      if (!montado.current) return;
+      aplicar(r);
       soltarPrevia(previaEnviada);
     } catch (e) {
+      if (!montado.current) return;
       if (e instanceof ConexaoPerdida) {
         // O servidor segue trabalhando: a resposta vem pelo histórico.
-        soltarPrevia(previaEnviada);
+        void recuperar(id, false, enviado);
+      } else if (e instanceof ApiError && e.status === 409 && e.detail === "em_andamento") {
+        // A conversa ainda responde outra mensagem (outra aba, ou uma resposta que se perdeu).
+        devolver(enviado);
         void recuperar(id);
       } else {
         setErro(mensagemDeErro(e));
-        // Nada se perde: texto e foto voltam para a caixa.
-        if (!sugestao) setTexto(digitado);
-        setFoto(fotoEnviada);
-        setPrevia(previaEnviada);
+        devolver(enviado);
         if (nova) {
           gravarThread(null);
           setThreadId(null);
         }
       }
     } finally {
-      abortar.current = null;
-      setEnvio(null);
-      setPasso(null);
+      if (abortar.current === controle) abortar.current = null;
+      if (montado.current) {
+        setEnvio(null);
+        setPasso(null);
+      }
     }
   }
 

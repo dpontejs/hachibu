@@ -186,7 +186,11 @@ export class ConexaoPerdida extends Error {
 }
 
 /** Lê um corpo SSE: chama `aoEvento(tipo, dado)` para cada evento; comentários (`: vivo`) são ignorados. */
-async function lerEventos(resp: Response, aoEvento: (tipo: string, dado: unknown) => void): Promise<void> {
+async function lerEventos(
+  resp: Response,
+  aoEvento: (tipo: string, dado: unknown) => void,
+  aoSinal?: () => void,
+): Promise<void> {
   const leitor = resp.body?.getReader();
   const decodificador = new TextDecoder();
   let resto = "";
@@ -206,6 +210,7 @@ async function lerEventos(resp: Response, aoEvento: (tipo: string, dado: unknown
   for (;;) {
     const { done, value } = await leitor.read();
     if (done) break;
+    aoSinal?.();
     resto += decodificador.decode(value, { stream: true });
     const blocos = resto.split("\n\n");
     resto = blocos.pop() ?? "";
@@ -379,9 +384,14 @@ export const api = {
     mensagem: string,
     foto?: File | Blob | null,
     threadId?: string | null,
-    aoPasso?: (ferramenta: string) => void,
-    sinal?: AbortSignal,
+    opcoes: {
+      aoPasso?: (ferramenta: string) => void;
+      /** Chamado a cada pedaço recebido (inclui as batidas de 15 s): mostra que a conexão está viva. */
+      aoSinal?: () => void;
+      sinal?: AbortSignal;
+    } = {},
   ): Promise<RespostaCoach> {
+    const { aoPasso, aoSinal, sinal } = opcoes;
     const corpo = new FormData();
     corpo.append("mensagem", mensagem);
     if (foto) corpo.append("foto", foto, foto instanceof File ? foto.name : "foto.jpg");
@@ -398,6 +408,7 @@ export const api = {
     } catch {
       throw new ConexaoPerdida();
     }
+    aoSinal?.();
     if (!resp.ok || !(resp.headers.get("content-type") ?? "").includes("text/event-stream"))
       return lerResposta<RespostaCoach>(resp);
     let fim: RespostaCoach | null = null;
@@ -410,7 +421,7 @@ export const api = {
           const { status, detail } = dado as { status: number; detail: unknown };
           erro = new ApiError(status, detail);
         }
-      });
+      }, aoSinal);
     } catch {
       throw new ConexaoPerdida();
     }

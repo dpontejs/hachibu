@@ -564,5 +564,91 @@ describe("Coach", () => {
       await vi.advanceTimersByTimeAsync(16000);
       expect(await screen.findByText(/ainda trabalhando nisso/i)).toBeInTheDocument();
     });
+
+    it("se a mensagem não chegou ao servidor, o texto volta para a caixa", async () => {
+      const s = sse();
+      mockFetch((u, init) => {
+        if (u === "/api/coach" && init?.method === "POST") return s.resposta;
+        if (u.startsWith("/api/coach/")) return json({ detail: "conversa_inexistente" }, 404);
+      });
+      const user = userEvent.setup();
+      renderCoach();
+      await user.type(screen.getByRole("textbox", { name: /mensagem para o coach/i }), "almocei arroz");
+      await user.click(screen.getByRole("button", { name: /enviar/i }));
+      s.fechar();
+      expect(await screen.findByRole("alert")).toBeInTheDocument();
+      expect(screen.getByRole("textbox", { name: /mensagem para o coach/i })).toHaveValue("almocei arroz");
+    });
+
+    it("se o coach terminou sem responder a mensagem, o texto volta para a caixa", async () => {
+      const s = sse();
+      mockFetch((u, init) => {
+        if (u === "/api/coach" && init?.method === "POST") return s.resposta;
+        if (u.startsWith("/api/coach/"))
+          return json({ thread_id: u.split("/").pop(), processando: false, mensagens: [], pendente: null });
+      });
+      const user = userEvent.setup();
+      renderCoach();
+      await user.type(screen.getByRole("textbox", { name: /mensagem para o coach/i }), "almocei arroz");
+      await user.click(screen.getByRole("button", { name: /enviar/i }));
+      s.fechar();
+      expect(await screen.findByRole("alert")).toBeInTheDocument();
+      expect(screen.getByRole("textbox", { name: /mensagem para o coach/i })).toHaveValue("almocei arroz");
+    });
+
+    it("coach fora do ar durante a recuperação para de tentar e avisa", async () => {
+      const s = sse();
+      let consultas = 0;
+      mockFetch((u, init) => {
+        if (u === "/api/coach" && init?.method === "POST") return s.resposta;
+        if (u.startsWith("/api/coach/")) {
+          consultas++;
+          return json({ detail: "coach_indisponivel" }, 503);
+        }
+      });
+      const user = userEvent.setup();
+      renderCoach();
+      await user.type(screen.getByRole("textbox", { name: /mensagem para o coach/i }), "oi");
+      await user.click(screen.getByRole("button", { name: /enviar/i }));
+      s.fechar();
+      expect(await screen.findByRole("alert")).toHaveTextContent(/fora do ar/i);
+      expect(consultas).toBe(1);
+    });
+
+    it("sair da tela no meio da resposta não troca a conversa salva", async () => {
+      const s = sse();
+      mockFetch((u, init) => (u === "/api/coach" && init?.method === "POST" ? s.resposta : undefined));
+      const user = userEvent.setup();
+      const { unmount } = renderCoach();
+      await user.type(screen.getByRole("textbox", { name: /mensagem para o coach/i }), "oi");
+      await user.click(screen.getByRole("button", { name: /enviar/i }));
+      unmount();
+      localStorage.setItem(CHAVE_THREAD, "t-outra");
+      s.evento("fim", RESPOSTA("t-1"));
+      s.fechar();
+      await new Promise((r) => setTimeout(r, 20));
+      expect(localStorage.getItem(CHAVE_THREAD)).toBe("t-outra");
+    });
+
+    it("conversa já em andamento (outra aba) espera a resposta dela", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      localStorage.setItem(CHAVE_THREAD, "t-1");
+      let consultas = 0;
+      mockFetch((u, init) => {
+        if (u === "/api/coach" && init?.method === "POST") return json({ detail: "em_andamento" }, 409);
+        if (u === "/api/coach/t-1") {
+          consultas++;
+          return json(consultas < 3 ? { ...RESPOSTA("t-1"), processando: consultas === 2, mensagens: [] } : RESPOSTA("t-1"));
+        }
+      });
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderCoach();
+      await waitFor(() => expect(consultas).toBe(1));
+      await user.type(screen.getByRole("textbox", { name: /mensagem para o coach/i }), "oi");
+      await user.click(screen.getByRole("button", { name: /enviar/i }));
+      await vi.advanceTimersByTimeAsync(3500);
+      expect(await screen.findByText("Arroz 150 g e frango 120 g. Confere?")).toBeInTheDocument();
+      expect(screen.getByRole("textbox", { name: /mensagem para o coach/i })).toHaveValue("oi");
+    });
   });
 });
