@@ -4,6 +4,14 @@ from fastapi.testclient import TestClient
 from hachibu.app import create_app
 from hachibu.config import Settings
 
+MIGRACOES = [
+    "001_inicial.sql",
+    "002_alimentos.sql",
+    "003_coach.sql",
+    "004_conversas.sql",
+    "005_memorias.sql",
+]
+
 CONVITE = "convite-teste"
 
 

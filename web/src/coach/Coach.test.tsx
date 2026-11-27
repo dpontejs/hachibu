@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import Coach, { CHAVE_THREAD } from "./Coach";
+import Coach, { CHAVE_THREAD, nomeFerramenta } from "./Coach";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -433,5 +433,10 @@ describe("Coach", () => {
     await user.type(screen.getByRole("textbox", { name: /mensagem para o coach/i }), "oi");
     await user.click(screen.getByRole("button", { name: /enviar/i }));
     expect(screen.getByRole("button", { name: /conversas/i })).toBeDisabled();
+  });
+
+  it("chips de memória dizem o que o coach fez", () => {
+    expect(nomeFerramenta("lembrar")).toEqual({ texto: "lembrei", skill: false });
+    expect(nomeFerramenta("esquecer_gosto")).toEqual({ texto: "esqueci", skill: false });
   });
 });

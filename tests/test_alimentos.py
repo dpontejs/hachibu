@@ -47,7 +47,7 @@ def test_migracao_002_preserva_dados(tmp_path):
     conn.execute("INSERT INTO goals VALUES (1, 2759, 144, 402, 64, 2800)")
     conn.close()
     conn = connect(caminho)
-    assert migrate(conn) == ["002_alimentos.sql", "003_coach.sql", "004_conversas.sql"]
+    assert migrate(conn) == ["002_alimentos.sql", "003_coach.sql", "004_conversas.sql", "005_memorias.sql"]
     g = conn.execute("SELECT kcal, origem, ajustada_em FROM goals WHERE user_id = 1").fetchone()
     assert (g["kcal"], g["origem"], g["ajustada_em"]) == (2759, "formula", None)
 

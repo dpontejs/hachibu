@@ -13,6 +13,7 @@ import {
   type Sexo,
 } from "../api";
 import Diagnostico from "../components/Diagnostico";
+import Memorias from "../components/Memorias";
 import { litros, rotuloOrigem } from "../formato";
 
 interface Form {
@@ -322,6 +323,8 @@ export default function Perfil() {
           </button>
         </div>
       </form>
+
+      {!novo && <Memorias />}
     </div>
   );
 }

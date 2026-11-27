@@ -163,6 +163,17 @@ export interface ConversaCoach {
   pendente: boolean;
 }
 
+export type TipoMemoria = "restricao" | "condicao" | "gosto";
+
+/** O que o coach sabe do aluno entre conversas. */
+export interface Memoria {
+  id: number;
+  tipo: TipoMemoria;
+  texto: string;
+  origem: "coach" | "aluno";
+  criado_em: string;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly detail: unknown;
@@ -330,6 +341,10 @@ export const api = {
       `/coach/${encodeURIComponent(threadId)}/decisao`,
       motivo?.trim() ? { aprovar, motivo: motivo.trim() } : { aprovar },
     ),
+  memorias: () => request<{ memorias: Memoria[] }>("GET", "/memorias"),
+  criarMemoria: (tipo: TipoMemoria, texto: string) => request<Memoria>("POST", "/memorias", { tipo, texto }),
+  editarMemoria: (id: number, texto: string) => request<Memoria>("PATCH", `/memorias/${id}`, { texto }),
+  apagarMemoria: (id: number) => request<unknown>("DELETE", `/memorias/${id}`),
   coachConversas: () => request<{ conversas: ConversaCoach[] }>("GET", "/coach/conversas"),
   /** `null` quando a thread não existe ou não é do usuário (404): vira conversa nova. */
   async coachHistorico(threadId: string): Promise<RespostaCoach | null> {
@@ -353,7 +368,10 @@ export function mensagemDeErro(e: unknown): string | null {
     if (e.status === 503 && e.detail === "coach_indisponivel") return MSG_COACH_FORA;
     if (e.status === 409 && e.detail === "aprovacao_pendente")
       return "Responda o pedido acima (aprovar ou recusar) antes de mandar outra mensagem.";
-    if (e.status === 422) return typeof e.detail === "string" ? e.detail : "Confira os campos destacados.";
+    if (e.detail === "memoria_repetida") return "Isso já está na lista.";
+    if (e.detail === "limite_de_memorias") return "A lista desse tipo está cheia. Apague algo que não vale mais.";
+    if (e.detail === "memoria_inexistente") return "Essa memória não existe mais.";
+    if (e.status === 422) return typeof e.detail === "string" ? e.detail : "Confira os campos.";
     if (e.status === 429) return "Muitas tentativas. Espere alguns minutos.";
     if (e.status >= 500) return "O servidor tropeçou. Tente de novo.";
     return typeof e.detail === "string" ? e.detail : e.message;
