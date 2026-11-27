@@ -8,6 +8,36 @@ const LINHAS: { campo: keyof Omit<ArgsAjusteMetas, "justificativa">; rotulo: str
   { campo: "gordura_g", rotulo: "GORD", nome: "gordura", unidade: "g", cor: "var(--gord)" },
 ];
 
+interface DiaResumo {
+  dia: string;
+  nome: string;
+  itens: string[];
+  corrida: string | null;
+}
+
+/** A semana proposta em blocos: um por dia, um exercício por linha, a corrida à parte. */
+function Semana({ dias }: { dias: DiaResumo[] }) {
+  return (
+    <div className="aprovacao__semana">
+      {dias.map((d) => (
+        <section key={d.dia} role="group" aria-label={d.dia} className="aprovacao__dia">
+          <h4>
+            <span className="px">{d.dia.slice(0, 3).toUpperCase()}</span> {d.nome}
+          </h4>
+          {(d.itens.length > 0 || d.corrida) && (
+            <ul>
+              {d.itens.map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
+              {d.corrida && <li className="aprovacao__corrida">{d.corrida}</li>}
+            </ul>
+          )}
+        </section>
+      ))}
+    </div>
+  );
+}
+
 function numero(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
@@ -34,6 +64,7 @@ export default function Aprovacao({
   const mudancas = Array.isArray(pendente.args.mudancas)
     ? pendente.args.mudancas.filter((m): m is string => typeof m === "string")
     : [];
+  const semana = Array.isArray(pendente.args.semana) ? (pendente.args.semana as DiaResumo[]) : [];
 
   useEffect(() => {
     if (!ajuste) return;
@@ -89,11 +120,22 @@ export default function Aprovacao({
           })}
         </dl>
       ) : plano && mudancas.length > 0 ? (
-        <ul className="aprovacao__mudancas" aria-label="Mudanças" tabIndex={0}>
-          {mudancas.map((m, i) => (
-            <li key={i}>{m}</li>
-          ))}
-        </ul>
+        <>
+          <p className="rotulo px">O QUE MUDA</p>
+          <ul className="aprovacao__mudancas" aria-label="Mudanças">
+            {mudancas.map((m, i) => (
+              <li key={i}>{m}</li>
+            ))}
+          </ul>
+          {semana.length > 0 && (
+            <details className="aprovacao__inteira">
+              <summary>Ver a semana inteira</summary>
+              <Semana dias={semana} />
+            </details>
+          )}
+        </>
+      ) : plano && semana.length > 0 ? (
+        <Semana dias={semana} />
       ) : (
         <p className="aprovacao__descricao">{pendente.descricao}</p>
       )}

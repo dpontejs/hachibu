@@ -2504,8 +2504,40 @@ input[type="number"] {
   flex-direction: column;
   gap: 4px;
   font-size: 14px;
-  max-height: 260px;
-  overflow-y: auto;
+}
+.aprovacao__semana {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.aprovacao__dia {
+  border-left: 2px solid var(--trilho);
+  padding-left: 10px;
+}
+.aprovacao__dia h4 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.aprovacao__dia h4 .px {
+  font-size: 8px;
+  color: var(--acento);
+  margin-right: 4px;
+}
+.aprovacao__dia ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 13px;
+  color: var(--mudo);
+}
+.aprovacao__corrida {
+  color: var(--acento);
+}
+.aprovacao__inteira summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--mudo);
+  margin: 6px 0;
 }
 .treino__recomecar {
   align-self: flex-start;
