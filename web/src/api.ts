@@ -163,6 +163,17 @@ export interface ConversaCoach {
   pendente: boolean;
 }
 
+export type TipoMemoria = "restricao" | "condicao" | "gosto";
+
+/** O que o coach sabe do aluno entre conversas. */
+export interface Memoria {
+  id: number;
+  tipo: TipoMemoria;
+  texto: string;
+  origem: "coach" | "aluno";
+  criado_em: string;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly detail: unknown;
@@ -330,6 +341,10 @@ export const api = {
       `/coach/${encodeURIComponent(threadId)}/decisao`,
       motivo?.trim() ? { aprovar, motivo: motivo.trim() } : { aprovar },
     ),
+  memorias: () => request<{ memorias: Memoria[] }>("GET", "/memorias"),
+  criarMemoria: (tipo: TipoMemoria, texto: string) => request<Memoria>("POST", "/memorias", { tipo, texto }),
+  editarMemoria: (id: number, texto: string) => request<Memoria>("PATCH", `/memorias/${id}`, { texto }),
+  apagarMemoria: (id: number) => request<unknown>("DELETE", `/memorias/${id}`),
   coachConversas: () => request<{ conversas: ConversaCoach[] }>("GET", "/coach/conversas"),
   /** `null` quando a thread não existe ou não é do usuário (404): vira conversa nova. */
   async coachHistorico(threadId: string): Promise<RespostaCoach | null> {

@@ -14,7 +14,10 @@ const LADO_MAX_FOTO = 1600;
 const SUGESTOES = ["Como está meu dia?", "O que janto para bater a proteína?", "Monta um treino de 30 min"];
 
 /** `ler_dia` → "ler dia"; `skill:corrida` → "skill corrida", marcado como skill. */
+const NOMES: Record<string, string> = { lembrar: "lembrei", esquecer_gosto: "esqueci" };
+
 export function nomeFerramenta(f: string): { texto: string; skill: boolean } {
+  if (f in NOMES) return { texto: NOMES[f], skill: false };
   const skill = f.startsWith("skill:");
   const nome = (skill ? f.slice("skill:".length) : f).replace(/_/g, " ").trim();
   return { texto: skill ? `skill ${nome}` : nome, skill };
