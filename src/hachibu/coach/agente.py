@@ -14,6 +14,7 @@ from pathlib import Path
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.errors import GraphRecursionError
 from langgraph.types import Command
 
 from hachibu.coach.prompts import sistema
@@ -22,6 +23,14 @@ from hachibu.coach.tools import criar_tools
 from hachibu.config import Settings
 
 MARCA_FOTO = "\n\n[o aluno anexou uma foto: use analisar_foto_refeicao]"
+# Teto de passos do grafo por mensagem (cada volta modelo → tools são 2 passos): limita o gasto da chave
+# mesmo se o modelo entrar em laço. O padrão do create_agent é 9999.
+LIMITE_PASSOS = 25
+DESISTENCIA = "Me enrolei com essa pergunta. Pode reformular de um jeito mais direto?"
+
+
+class AprovacaoPendente(Exception):
+    """Há uma proposta esperando aprovar/recusar: mensagem nova quebraria a conversa."""
 
 
 @dataclass
@@ -88,6 +97,28 @@ def montar_mensagens(historico: list) -> list[Mensagem]:
     return mensagens
 
 
+def _remendar_orfas(agente, config: dict, mensagens: list) -> None:
+    """Responde tool calls que ficaram sem resposta (falha no meio de uma volta).
+
+    O Gemini recusa uma conversa com function_call sem function_response: sem este remendo, a thread
+    ficaria quebrada para sempre.
+    """
+    respondidas = {m.tool_call_id for m in mensagens if isinstance(m, ToolMessage)}
+    orfas = [
+        c for m in mensagens if isinstance(m, AIMessage) for c in m.tool_calls if c["id"] not in respondidas
+    ]
+    if orfas:
+        remendos = [
+            ToolMessage(
+                content="erro: esta ferramenta não terminou por uma falha interna. Chame de novo se preciso.",
+                tool_call_id=c["id"],
+                name=c["name"],
+            )
+            for c in orfas
+        ]
+        agente.update_state(config, {"messages": remendos}, as_node="tools")
+
+
 def responder(
     settings: Settings,
     modelo,
@@ -100,12 +131,23 @@ def responder(
 ) -> RespostaCoach:
     relogio = agora or (lambda: datetime.now(UTC))
     agente = _agente(settings, modelo, user_id, relogio, foto)
-    config = {"configurable": {"thread_id": thread_id}}
+    config = {"configurable": {"thread_id": thread_id}, "recursion_limit": LIMITE_PASSOS}
+    estado = agente.get_state(config)
     if decisao is not None:
-        entrada = Command(resume=decisao)
+        if not estado.interrupts:
+            raise AprovacaoPendente  # não deveria acontecer: a rota confere antes
+        # Retoma pelo id da pausa: com duas propostas na mesma resposta, a outra vira o próximo card.
+        entrada = Command(resume={estado.interrupts[0].id: decisao})
     else:
+        if estado.interrupts:
+            raise AprovacaoPendente
+        _remendar_orfas(agente, config, estado.values.get("messages", []))
         entrada = {"messages": [HumanMessage((mensagem or "") + (MARCA_FOTO if foto else ""))]}
-    resultado = agente.invoke(entrada, config)
+    try:
+        resultado = agente.invoke(entrada, config)
+    except GraphRecursionError:
+        historico_ = agente.get_state(config).values.get("messages", [])
+        return RespostaCoach([*montar_mensagens(historico_), Mensagem("coach", DESISTENCIA)], None)
     pausas = resultado.get("__interrupt__") or []
     pendente = Pendente(**pausas[0].value) if pausas else None
     return RespostaCoach(montar_mensagens(resultado["messages"]), pendente)

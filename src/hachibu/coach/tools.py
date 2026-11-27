@@ -4,6 +4,7 @@ O schema que o modelo vê só tem os argumentos da tarefa. O usuário vem da ses
 """
 
 import json
+import logging
 from collections.abc import Callable
 from datetime import datetime
 
@@ -15,6 +16,8 @@ from hachibu.coach import ferramentas as f
 from hachibu.coach.foto import analisar_foto, casar_com_taco
 from hachibu.coach.skills import criar_tool_carregar_skill
 from hachibu.db import connect
+
+log = logging.getLogger("hachibu.coach")
 
 
 class ItemRefeicao(BaseModel):
@@ -41,6 +44,10 @@ def criar_tools(
             return _json(funcao(db, user_id, *args, **kwargs))
         except f.ErroFerramenta as e:
             return f"erro: {e}"
+        except Exception:
+            # Falha inesperada (banco travado, bug): o modelo recebe texto e a conversa não trava.
+            log.exception("tool %s falhou", funcao.__name__)
+            return "erro: a ferramenta falhou agora. Tente de novo ou siga sem ela."
         finally:
             db.close()
 
@@ -128,6 +135,9 @@ def criar_tools(
         try:
             itens = analisar_foto(visao, *foto)
             return _json({"itens": casar_com_taco(db, itens)})
+        except Exception:
+            log.exception("análise de foto falhou")
+            return "erro: não consegui analisar a foto. Peça outra foto ou que o aluno descreva o prato."
         finally:
             db.close()
 

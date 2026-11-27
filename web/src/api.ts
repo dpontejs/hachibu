@@ -338,7 +338,9 @@ export function mensagemDeErro(e: unknown): string | null {
   if (e instanceof ApiError) {
     if (e.status === 429 && e.detail === "cota_do_coach") return MSG_COTA_COACH;
     if (e.status === 503 && e.detail === "coach_indisponivel") return MSG_COACH_FORA;
-    if (e.status === 422) return "Confira os campos destacados.";
+    if (e.status === 409 && e.detail === "aprovacao_pendente")
+      return "Responda o pedido acima (aprovar ou recusar) antes de mandar outra mensagem.";
+    if (e.status === 422) return typeof e.detail === "string" ? e.detail : "Confira os campos destacados.";
     if (e.status === 429) return "Muitas tentativas. Espere alguns minutos.";
     if (e.status >= 500) return "O servidor tropeçou. Tente de novo.";
     return typeof e.detail === "string" ? e.detail : e.message;

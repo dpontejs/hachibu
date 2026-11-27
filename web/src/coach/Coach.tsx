@@ -309,7 +309,8 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
   }
 
   const vazio = mensagens.length === 0 && !envio && !carregando;
-  const podeEnviar = !ocupado && !bloqueado && (texto.trim() !== "" || foto !== null);
+  // Sem esperar o histórico carregar, uma mensagem poderia furar uma aprovação pendente.
+  const podeEnviar = !ocupado && !bloqueado && !carregando && (texto.trim() !== "" || foto !== null);
 
   return (
     <div className={chamado ? "coach coach--chamado" : "coach"}>

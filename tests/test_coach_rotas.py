@@ -1,6 +1,5 @@
 from dataclasses import replace
 
-import pytest
 from fastapi.testclient import TestClient
 
 from hachibu.app import create_app
@@ -11,13 +10,6 @@ from tests.conftest import CONVITE
 from tests.test_metas import BASE
 
 JPEG = b"\xff\xd8\xff" + b"0" * 50
-
-
-@pytest.fixture
-def aluno(app, make_user):
-    c = make_user()
-    c.put("/api/perfil", json=BASE)
-    return c
 
 
 def enviar(c, mensagem="oi", thread_id=None, foto=None):

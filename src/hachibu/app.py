@@ -43,7 +43,8 @@ def _modelo_coach(settings: Settings):
     from langchain.chat_models import init_chat_model
 
     # O Gemini 3.x usa amostragem fixa e ignora temperature; por isso não passamos.
-    return init_chat_model(settings.coach_modelo, api_key=settings.gemini_api_key)
+    # Sem timeout, o cliente espera para sempre e repete 6 vezes: segura threads e a tela fica "pensando".
+    return init_chat_model(settings.coach_modelo, api_key=settings.gemini_api_key, timeout=30, max_retries=2)
 
 
 def _servir_spa(app: FastAPI, dist: Path) -> None:

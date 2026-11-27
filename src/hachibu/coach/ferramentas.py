@@ -112,12 +112,30 @@ def validar_ajuste_metas(
     if kcal < minimo:
         raise ErroFerramenta(
             f"{kcal} kcal é um déficit maior que 25% do gasto diário ({round(gasto)} kcal). "
-            f"O mínimo é {minimo} kcal, a não ser que um nutricionista tenha prescrito."
+            f"O mínimo é {minimo} kcal. Se um nutricionista prescreveu menos, "
+            "o aluno preenche a meta dele no Perfil."
         )
+    maximo = round(gasto * 1.25)
+    if kcal > maximo:
+        raise ErroFerramenta(
+            f"{kcal} kcal passa do máximo razoável ({maximo} kcal, 25% acima do gasto diário)."
+        )
+    for nome, valor, teto in (
+        ("proteína", proteina_g, 400),
+        ("carboidrato", carbo_g, 900),
+        ("gordura", gordura_g, 250),
+    ):
+        if valor is not None and not 0 <= valor <= teto:
+            raise ErroFerramenta(f"{nome} de {valor} g fora da faixa (0 a {teto} g).")
     formula = calcular_metas(perfil.model_copy(update={"meta_profissional_kcal": None}))
     proteina = proteina_g if proteina_g is not None else formula.proteina_g
     gordura = gordura_g if gordura_g is not None else formula.gordura_g
     carbo = carbo_g if carbo_g is not None else round(max((kcal - 4 * proteina - 9 * gordura) / 4, 0))
+    total = 4 * proteina + 4 * carbo + 9 * gordura
+    if abs(total - kcal) > 0.1 * kcal:
+        raise ErroFerramenta(
+            f"Os macros somam {total} kcal, longe da meta de {kcal} kcal (tolerância de 10%). Ajuste."
+        )
     return Metas(
         kcal=kcal,
         proteina_g=proteina,

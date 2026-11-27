@@ -242,6 +242,24 @@ describe("Coach", () => {
     expect(campo).toHaveValue("mais uma");
   });
 
+  it("422 com texto do servidor mostra o texto (ex.: foto grande)", async () => {
+    mockFetch((u) => (u === "/api/coach" ? json({ detail: "foto maior que 5 MB" }, 422) : undefined));
+    const user = userEvent.setup();
+    renderCoach();
+    await user.type(screen.getByRole("textbox", { name: /mensagem para o coach/i }), "oi");
+    await user.click(screen.getByRole("button", { name: /enviar/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("foto maior que 5 MB");
+  });
+
+  it("409 de aprovação pendente pede para responder o card", async () => {
+    mockFetch((u) => (u === "/api/coach" ? json({ detail: "aprovacao_pendente" }, 409) : undefined));
+    const user = userEvent.setup();
+    renderCoach();
+    await user.type(screen.getByRole("textbox", { name: /mensagem para o coach/i }), "oi");
+    await user.click(screen.getByRole("button", { name: /enviar/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/responda o pedido/i);
+  });
+
   it("503 mostra que o coach está fora do ar", async () => {
     mockFetch((u) => (u === "/api/coach" ? json({ detail: "coach_indisponivel" }, 503) : undefined));
     const user = userEvent.setup();

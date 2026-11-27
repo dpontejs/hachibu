@@ -11,8 +11,8 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from hachibu.auth import UserId
-from hachibu.coach.agente import RespostaCoach, historico, responder
-from hachibu.coach.foto import validar_foto
+from hachibu.coach.agente import AprovacaoPendente, RespostaCoach, historico, responder
+from hachibu.coach.foto import TAMANHO_MAXIMO, validar_foto
 from hachibu.db import Db
 from hachibu.diario import hoje
 
@@ -66,6 +66,8 @@ def _chamar(funcao, *args, **kwargs) -> RespostaCoach:
         return funcao(*args, **kwargs)
     except HTTPException:
         raise
+    except AprovacaoPendente:
+        raise HTTPException(409, "aprovacao_pendente") from None
     except Exception:
         # Falha do provedor (chave inválida, fora do ar, cota): o resto do app segue funcionando.
         log.exception("coach falhou")
@@ -86,7 +88,10 @@ async def conversar(
         _exigir_dono(db, user_id, thread_id)
     anexo = None
     if foto is not None:
-        conteudo = await foto.read()
+        # Recusa antes de carregar tudo na memória: o upload não tem limite no multipart.
+        if foto.size is not None and foto.size > TAMANHO_MAXIMO:
+            raise HTTPException(422, "foto maior que 5 MB")
+        conteudo = await foto.read(TAMANHO_MAXIMO + 1)
         try:
             validar_foto(conteudo, foto.content_type or "")
         except ValueError as e:
