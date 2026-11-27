@@ -13,6 +13,17 @@ O design, as decisões e as próximas etapas estão em [`docs/features/hachibu.m
 - Tela Hoje: saldo de kcal e macros, água e refeições do dia.
 - Registro de refeições com busca na TACO e gramas; os macros são calculados no servidor.
 - PWA instalável no iPhone, com layout de celular e de computador.
+- Coach com IA no painel: conversa, foto do prato, registros e ajuste de meta com aprovação.
+
+## Como o coach funciona
+
+- **Agente único** (`create_agent` do LangChain com o Gemini 3.6 Flash). O estado do aluno é compartilhado entre dieta, treino e corrida, e um agente só raciocina sobre tudo junto, sem perder contexto entre especialistas.
+- **Skills por domínio** (`src/hachibu/coach/skills/*/SKILL.md`: nutrição, musculação, corrida). O catálogo fica no prompt de sistema, e o coach carrega a skill do assunto com a tool `carregar_skill`. Uma pergunta mista carrega duas.
+- **Tools** (`src/hachibu/coach/tools.py`) sobre funções puras (`ferramentas.py`). O usuário vem da sessão e nunca aparece no schema que o modelo vê. As calorias sempre vêm da TACO.
+- **Foto do prato:** o modelo de visão lista os itens e estima as gramas, e cada item é casado com a TACO. O coach mostra a lista e só registra depois que o aluno confirma. A foto não é guardada, e o texto escrito nela é tratado como dado.
+- **Aprovação humana:** `ajustar_metas` valida a proposta em código (piso, déficit de no máximo 25%, macros coerentes) e só então pausa com `interrupt()`. A conversa fica salva num checkpointer SQLite até o aluno aprovar ou recusar.
+- **Robustez:** o grafo tem teto de passos por mensagem, o Gemini tem timeout de 30 s, há cota diária por usuário, tool calls que ficaram sem resposta são remendadas e o app segue funcionando sem a chave (o coach responde 503).
+- **Testes:** um modelo falso com respostas roteirizadas roda no CI, e conversas reais com o Gemini ficam em `pytest -m llm`, rodadas à mão.
 
 ## Fontes de dados
 
@@ -22,7 +33,7 @@ O design, as decisões e as próximas etapas estão em [`docs/features/hachibu.m
 
 ```bash
 make install
-cp .env.example .env   # preencha SESSION_SECRET e INVITE_CODE
+cp .env.example .env   # preencha SESSION_SECRET, INVITE_CODE e GEMINI_API_KEY
 make test              # back (pytest) e front (vitest)
 make dev               # API em :8000 e front em :5173
 docker compose up --build   # a imagem de produção, local
