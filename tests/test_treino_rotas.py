@@ -62,13 +62,6 @@ def test_perfil_mudou_plano_fica_com_avisos(settings, aluno):
     assert avisos and any("equipamento" in a for a in avisos)
 
 
-def test_pontos_do_rascunho_ficam_com_a_versao(settings, aluno):
-    perfil = BASE | {"dias_semana": 7, "corridas_semana": 6, "corrida_quando": "mesmo_dia"}
-    aluno.put("/api/perfil", json=perfil)
-    semear(settings, perfil)
-    assert any("recuperação" in n for n in plano(aluno).json()["notas"])
-
-
 def test_avisa_quando_ha_condicoes_fisicas(settings, aluno):
     semear(settings, BASE)
     assert plano(aluno).json()["tem_condicoes"] is False

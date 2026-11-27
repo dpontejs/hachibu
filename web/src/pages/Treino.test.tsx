@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { EVENTO_PLANO } from "../coach/abrir";
 import Treino from "./Treino";
 
 function json(body: unknown, status = 200): Response {
@@ -18,7 +19,6 @@ const PLANO = {
   criado_em: "2026-11-28T10:00:00Z",
   semana_corrida: 1,
   avisos: [] as string[],
-  notas: [] as string[],
   tem_condicoes: false,
   dias: [
     {
@@ -123,12 +123,16 @@ describe("Treino", () => {
     expect(screen.getByTestId("destino")).toHaveTextContent(/não cabe mais no meu perfil/i);
   });
 
-  it("mostra os pontos para conversar com o coach", async () => {
-    servidor((u) =>
-      u === "/api/plano" ? json({ ...PLANO, notas: ["Você pediu 3 corridas por semana; ficaram 2."] }) : undefined,
-    );
+  it("recarrega quando um plano é aprovado no coach", async () => {
+    let versao = 1;
+    servidor((u) => (u === "/api/plano" ? json({ ...PLANO, versao, dias: PLANO.dias }) : undefined));
     renderTreino();
-    expect(await screen.findByText(/ficaram 2/)).toBeInTheDocument();
+    await screen.findByRole("region", { name: /hoje/i });
+    versao = 2;
+    const antes = (globalThis.fetch as unknown as { mock: { calls: unknown[] } }).mock.calls.length;
+    window.dispatchEvent(new Event(EVENTO_PLANO));
+    await new Promise((r) => setTimeout(r, 10));
+    expect((globalThis.fetch as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBeGreaterThan(antes);
   });
 
   it("se carregar falhar, oferece tentar de novo", async () => {

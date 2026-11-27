@@ -57,6 +57,8 @@ def sem_treino_pesado(dia: DiaPlano) -> bool:
 
 
 MAX_RECUPERACAO_MIN = 40
+# Sem minutos_corrida no perfil, o teto de uma sessão de corrida vem do nível.
+TETO_CORRIDA_NIVEL = {"intermediario": 60, "avancado": 120}
 
 
 def validar_plano(
@@ -75,7 +77,8 @@ def validar_plano(
                     f"(o aluno tem {perfil.equipamento})."
                 )
     # 2. um dia sem treino pesado (descanso ou recuperação) e os dias disponíveis
-    treino = [d for d in plano.dias if d.exercicios or d.corrida]
+    # A recuperação (caminhada leve) não conta como dia de treino.
+    treino = [d for d in plano.dias if not sem_treino_pesado(d)]
     if not any(sem_treino_pesado(d) for d in plano.dias):
         erros.append("o plano precisa de pelo menos 1 dia sem treino pesado (descanso ou recuperação).")
     if len(treino) > perfil.dias_semana:
@@ -104,6 +107,23 @@ def validar_plano(
                 f"{DIAS[dia.dia]}: corrida de {corrida.duracao_min} min, "
                 f"acima dos {perfil.minutos_corrida} min de corrida por sessão."
             )
+    # 3b. iniciante corre pela progressão; sem tempo de corrida no perfil, teto pelo nível
+    nivel_corrida = perfil.nivel_corrida or "iniciante"
+    for dia in plano.dias:
+        c = dia.corrida
+        if not c or c.tipo == "recuperacao":
+            continue
+        if nivel_corrida == "iniciante" and not c.progressao:
+            erros.append(
+                f"{DIAS[dia.dia]}: o aluno é iniciante na corrida; use a progressão (progressao: true). "
+                "Se ele já corre, ele muda o nível de corrida no Perfil."
+            )
+        elif not perfil.minutos_corrida and nivel_corrida in TETO_CORRIDA_NIVEL:
+            teto = TETO_CORRIDA_NIVEL[nivel_corrida]
+            if c.duracao_min > teto:
+                erros.append(
+                    f"{DIAS[dia.dia]}: corrida de {c.duracao_min} min, acima de {teto} min para o nível."
+                )
     # 4. nada de intervalado ou longão no dia seguinte a perna pesada
     for dia in plano.dias:
         corrida = corrida_efetiva(dia.corrida, semana_corrida)

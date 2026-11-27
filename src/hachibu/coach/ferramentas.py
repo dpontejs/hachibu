@@ -213,7 +213,14 @@ def _legenda(plano: PlanoIn) -> dict[str, str]:
 def rascunho_plano(db, user_id: int) -> dict:
     """Plano base em código a partir do perfil, com os pontos que não seguiram a preferência do aluno."""
     plano, pontos = gerar_plano_base(_perfil(db, user_id))
-    return {"plano": plano.model_dump(), "legenda": _legenda(plano), "pontos": pontos}
+    ativo = plano_ativo(db, user_id)
+    return {
+        "plano": plano.model_dump(),
+        "legenda": _legenda(plano),
+        "pontos": pontos,
+        # A proposta leva esta versão em versao_base: se o plano mudar antes da aprovação, nada é gravado.
+        "versao_atual": ativo[0]["versao"] if ativo else None,
+    }
 
 
 def ler_plano(db, user_id: int) -> dict:
@@ -242,14 +249,25 @@ def buscar_exercicio(db, user_id: int, termo: str) -> list[dict]:
     ][:15]
 
 
-def validar_proposta(db, user_id: int, plano: PlanoIn) -> list[str]:
-    """Valida contra o perfil atual e o plano ativo; devolve as mudanças que o aluno vai ver no card."""
+def validar_proposta(db, user_id: int, plano: PlanoIn, versao_base: int | None = None) -> list[str]:
+    """Valida contra o perfil e a versão de partida; devolve as mudanças que o aluno vai ver no card.
+
+    `versao_base` é a versão que o coach leu ao montar a proposta. Se o plano ativo for outro (o aluno aprovou
+    outra proposta no meio), aplicar esta desfaria aquela em silêncio: recusa.
+    """
     perfil = _perfil(db, user_id)
     ativo = plano_ativo(db, user_id)
+    versao_ativa = ativo[0]["versao"] if ativo else None
+    if versao_ativa != versao_base:
+        raise ErroFerramenta(
+            f"o plano mudou desde que esta proposta foi montada (agora é a versão {versao_ativa}). Nada foi "
+            "gravado: leia o plano de novo (ler_plano) e proponha a partir dele."
+        )
     anterior = ativo[1] if ativo else None
-    semana = semana_corrida(db, user_id)
+    # Primeiro plano: o volume de corrida não pode passar de 10% acima do rascunho em código.
+    referencia = anterior or gerar_plano_base(perfil)[0]
     erros = sorted(
-        {e for s in (semana, 9) for e in validar_plano(plano, perfil, anterior=anterior, semana_corrida=s)}
+        {e for s in range(1, 10) for e in validar_plano(plano, perfil, anterior=referencia, semana_corrida=s)}
     )
     if erros:
         raise ErroFerramenta("a proposta não passa nas regras do plano: " + " | ".join(erros))
@@ -259,6 +277,6 @@ def validar_proposta(db, user_id: int, plano: PlanoIn) -> list[str]:
     return mudancas
 
 
-def aplicar_plano(db, user_id: int, plano: PlanoIn) -> dict:
-    validar_proposta(db, user_id, plano)  # o perfil pode ter mudado entre a proposta e a aprovação
+def aplicar_plano(db, user_id: int, plano: PlanoIn, versao_base: int | None = None) -> dict:
+    validar_proposta(db, user_id, plano, versao_base)  # perfil ou plano podem ter mudado até a aprovação
     return {"versao": gravar_plano(db, user_id, plano, "coach")}

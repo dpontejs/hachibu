@@ -122,9 +122,7 @@ def criar_tools(
         if not decisao.get("aprovar"):
             motivo = decisao.get("motivo") or "sem motivo informado"
             return f"recusado pelo aluno, nada mudou. Motivo: {motivo}"
-        return "aprovado e aplicado: " + rodar(
-            f.aplicar_ajuste_metas, kcal, agora(), proteina_g, carbo_g, gordura_g
-        )
+        return aplicado(f.aplicar_ajuste_metas, kcal, agora(), proteina_g, carbo_g, gordura_g)
 
     @tool
     def lembrar(tipo: Literal["restricao", "condicao", "gosto"], texto: str) -> str:
@@ -158,17 +156,38 @@ def criar_tools(
         aluno. Use o id devolvido no plano."""
         return rodar(f.buscar_exercicio, termo)
 
-    @tool
-    def propor_plano(plano: PlanoIn, justificativa: str) -> str:
-        """Propõe a semana INTEIRA de treino (7 dias, 0 = segunda) para o aluno aprovar. Mantenha igual o que
-        ele não pediu para mudar. O sistema valida as regras (dias, tempo, equipamento, descanso, corrida) e
-        mostra ao aluno só o que muda. Só grava depois da aprovação."""
+    def aplicado(funcao, *args) -> str:
+        """Depois da aprovação: diz claramente se gravou ou não (o modelo não afirma o que não houve)."""
         db = connect(db_path)
         try:
-            # Valida antes de pedir aprovação: proposta inválida nunca chega ao aluno.
-            mudancas = f.validar_proposta(db, user_id, plano)
+            return "aprovado e gravado: " + _json(funcao(db, user_id, *args))
         except f.ErroFerramenta as e:
-            return f"erro: {e}"
+            return f"aprovado, mas nada foi gravado: {e}"
+        except Exception:
+            log.exception("aplicação falhou depois da aprovação")
+            return "aprovado, mas nada foi gravado: falha interna. Peça para o aluno tentar de novo."
+        finally:
+            db.close()
+
+    @tool
+    def propor_plano(plano: PlanoIn, justificativa: str, versao_base: int | None = None) -> str:
+        """Propõe a semana INTEIRA de treino (7 dias, 0 = segunda) para o aluno aprovar. Mantenha igual o que
+        ele não pediu para mudar. versao_base: a versão do plano de que você partiu (versao em ler_plano ou
+        versao_atual em rascunho_plano; vazio se ele ainda não tem plano). O sistema valida as regras e mostra
+        ao aluno só o que muda. Só grava depois da aprovação."""
+        db = connect(db_path)
+        try:
+            # Valida antes de pedir aprovação: proposta inválida nunca chega ao aluno. (Na retomada esta
+            # validação roda de novo: se o perfil ou o plano mudou, nada é gravado e o modelo sabe por quê.)
+            mudancas = f.validar_proposta(db, user_id, plano, versao_base)
+        except f.ErroFerramenta as e:
+            return (
+                f"erro: {e} (se o aluno já tinha aprovado esta proposta, nada foi gravado: "
+                "explique e proponha de novo)"
+            )
+        except Exception:
+            log.exception("validação da proposta falhou")
+            return "erro: não consegui validar a proposta agora. Tente de novo."
         finally:
             db.close()
         decisao = interrupt(
@@ -181,7 +200,7 @@ def criar_tools(
         if not decisao.get("aprovar"):
             motivo = decisao.get("motivo") or "sem motivo informado"
             return f"recusado pelo aluno, nada mudou. Motivo: {motivo}"
-        return "aprovado e aplicado: " + rodar(f.aplicar_plano, plano)
+        return aplicado(f.aplicar_plano, plano, versao_base)
 
     @tool
     def analisar_foto_refeicao() -> str:

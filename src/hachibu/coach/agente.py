@@ -1,7 +1,7 @@
 """O coach: agente único (create_agent) com as tools do aluno, skills e aprovação humana.
 
-A aprovação usa interrupt() dentro da tool ajustar_metas: a proposta é validada antes de pausar, e a
-conversa fica salva no checkpointer até o aluno aprovar ou recusar, mesmo entre duas requisições HTTP.
+A aprovação usa interrupt() dentro das tools ajustar_metas e propor_plano: a proposta é validada antes de
+pausar, e a conversa fica salva no checkpointer até o aluno aprovar ou recusar, mesmo entre duas requisições.
 """
 
 import sqlite3

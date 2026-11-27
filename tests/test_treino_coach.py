@@ -145,7 +145,7 @@ def test_proposta_igual_ao_plano_atual_e_recusada(settings, aluno, tools):
     db = connect(settings.db_path)
     gravar_plano(db, 1, base(), "coach")
     db.close()
-    r = tools["propor_plano"].invoke({"plano": base().model_dump(), "justificativa": "x"})
+    r = tools["propor_plano"].invoke({"plano": base().model_dump(), "justificativa": "x", "versao_base": 1})
     assert r.startswith("erro") and "nada muda" in r
 
 
@@ -156,7 +156,8 @@ def test_proposta_de_troca_mostra_so_a_mudanca(settings, aluno):
     novo = base().model_dump()
     novo["dias"][1]["exercicios"][0]["exercicio_id"] = "leg_press"
     modelo = roteiro(
-        chamada("propor_plano", {"plano": novo, "justificativa": "Você não gosta de agachar."}), "Ok"
+        chamada("propor_plano", {"plano": novo, "justificativa": "Não gosta de agachar.", "versao_base": 1}),
+        "Ok",
     )
     r = falar(settings, modelo, "troca o agachamento")
     assert len(r.pendente.args["mudancas"]) == 1
@@ -178,3 +179,143 @@ def test_plano_de_outro_usuario_fica_isolado(settings, aluno, make_user):
     db.close()
     tools = {t.name: t for t in criar_tools(settings.db_path, 1, lambda: AGORA)}
     assert tools["ler_plano"].invoke({}).startswith("erro")
+
+
+# ---------- achados da revisão ----------
+
+
+def test_progressao_so_vale_para_corrida_e_caminhada():
+    with pytest.raises(ValueError):
+        CorridaPlano(progressao=True, tipo="recuperacao", duracao_min=30, esforco_alvo="1-3")
+
+
+def test_campos_de_bloco_sao_ignorados_fora_da_corrida_e_caminhada():
+    c = CorridaPlano(tipo="leve", duracao_min=30, corre_min=0, anda_min=0, repeticoes=1, esforco_alvo="3-4")
+    assert (c.corre_min, c.anda_min, c.repeticoes) == (None, None, None)
+
+
+def test_diferenca_ignora_enchimento_da_corrida():
+    antes = base()
+    depois = antes.model_copy(deep=True)
+    for dia in depois.dias:
+        if dia.corrida and dia.corrida.progressao:
+            dia.corrida = dia.corrida.model_copy(update={"duracao_min": 99, "corre_min": 9.0})
+    assert diferencas(antes, depois) == []
+
+
+def test_diferenca_tirar_um_exercicio_nao_vira_cascata():
+    antes = base()
+    depois = antes.model_copy(deep=True)
+    saiu = depois.dias[0].exercicios.pop(0)
+    linhas = diferencas(antes, depois)
+    assert len(linhas) == 1 and "sai" in linhas[0]
+    assert diferencas(antes, depois)[0].endswith(diferencas(antes, depois)[0].split("sai ")[-1])
+    assert saiu.exercicio_id  # o supino saiu e é isso que a linha diz
+
+
+def test_diferenca_dias_trocados_vira_uma_linha_por_dia():
+    antes = base()
+    depois = antes.model_copy(deep=True)
+    seg, ter = depois.dias[0], depois.dias[1]
+    depois.dias[0] = ter.model_copy(update={"dia": 0})
+    depois.dias[1] = seg.model_copy(update={"dia": 1})
+    linhas = diferencas(antes, depois)
+    assert len(linhas) == 2 and all("treino de" in linha for linha in linhas)
+
+
+def test_aprovar_proposta_velha_nao_desfaz_outra(settings, aluno):
+    from langchain_core.messages import AIMessage
+
+    v1 = base()
+    db = connect(settings.db_path)
+    gravar_plano(db, 1, v1, "coach")
+    db.close()
+    troca_a = v1.model_dump()
+    troca_a["dias"][0]["exercicios"][0]["exercicio_id"] = "supino_halteres"
+    troca_b = v1.model_dump()
+    troca_b["dias"][1]["exercicios"][0]["exercicio_id"] = "leg_press"
+    # O Gemini pede as duas propostas na mesma resposta, ambas a partir da versão 1.
+    duas = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "propor_plano",
+                "args": {"plano": troca_a, "justificativa": "a", "versao_base": 1},
+                "id": "c1",
+            },
+            {
+                "name": "propor_plano",
+                "args": {"plano": troca_b, "justificativa": "b", "versao_base": 1},
+                "id": "c2",
+            },
+        ],
+    )
+    modelo = roteiro(duas, "Pronto.")
+    r = falar(settings, modelo, "troca o supino e o agachamento")
+    assert r.pendente is not None
+    r = falar(settings, modelo, decisao={"aprovar": True})
+    assert ativo(settings)[0]["versao"] == 2 and r.pendente is not None
+    falar(settings, modelo, decisao={"aprovar": True})
+    meta, gravado = ativo(settings)
+    # A segunda partiu da v1: aplicá-la desfaria a primeira. Nada é gravado; o coach propõe de novo.
+    assert meta["versao"] == 2
+    assert gravado.dias[0].exercicios[0].exercicio_id == "supino_halteres"
+
+
+def test_primeiro_plano_tem_teto_de_corrida(settings, aluno, tools):
+    exagero = base().model_dump()
+    for i in (1, 3, 5):
+        exagero["dias"][i]["corrida"] = {"tipo": "leve", "duracao_min": 90, "esforco_alvo": "3-4"}
+    r = tools["propor_plano"].invoke({"plano": exagero, "justificativa": "x"})
+    assert r.startswith("erro")
+
+
+def test_iniciante_corre_pela_progressao(settings, aluno, tools):
+    trocado = base().model_dump()
+    for dia in trocado["dias"]:
+        if dia["corrida"]:
+            dia["corrida"] = {"tipo": "leve", "duracao_min": 25, "esforco_alvo": "3-4"}
+    r = tools["propor_plano"].invoke({"plano": trocado, "justificativa": "x"})
+    assert r.startswith("erro") and "progress" in r
+
+
+def test_proposta_confere_todas_as_semanas_da_progressao(settings, aluno, tools):
+    aluno.put("/api/perfil", json=BASE | {"minutos_corrida": 27})
+    plano = base().model_dump()  # progressão chega a 33 min na semana 5
+    plano["dias"][1]["corrida"] = plano["dias"][0]["corrida"] or {
+        "progressao": True,
+        "tipo": "corrida_caminhada",
+        "duracao_min": 26,
+        "esforco_alvo": "3-5",
+    }
+    r = tools["propor_plano"].invoke({"plano": plano, "justificativa": "x"})
+    assert r.startswith("erro") and "corrida" in r
+
+
+def test_aprovado_mas_nao_gravado_diz_isso(settings, aluno, monkeypatch):
+    from hachibu.coach import ferramentas
+
+    modelo = roteiro(chamada("propor_plano", {"plano": base().model_dump(), "justificativa": "x"}), "Ok.")
+    falar(settings, modelo, "monta")
+
+    def falha(*a, **k):
+        raise ferramentas.ErroFerramenta("banco ocupado")
+
+    monkeypatch.setattr(ferramentas, "aplicar_plano", falha)
+    from hachibu.coach.agente import mensagens_da_thread
+
+    falar(settings, modelo, decisao={"aprovar": True})
+    assert any(m.startswith("aprovado, mas nada foi gravado") for m in mensagens_da_thread(settings, "t1"))
+
+
+def test_recuperacao_nao_conta_como_dia_de_treino():
+    from hachibu.treino.validador import validar_plano
+
+    p = PerfilIn(**BASE | {"dias_semana": 4})
+    plano = base().model_copy(deep=True)
+    plano.dias[6] = DiaPlano(
+        dia=6,
+        nome="Recuperação",
+        corrida=CorridaPlano(tipo="recuperacao", duracao_min=30, esforco_alvo="1-3"),
+    )
+    assert validar_plano(plano, p) == []

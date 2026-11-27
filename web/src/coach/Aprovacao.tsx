@@ -13,7 +13,7 @@ function numero(v: unknown): number | null {
 }
 
 /**
- * Card de aprovação de uma ação que o coach quer fazer (hoje, ajustar a meta).
+ * Card de aprovação de uma ação que o coach quer fazer (ajustar a meta, propor o plano de treino).
  * Nada muda no plano até o aluno tocar em Aprovar.
  */
 export default function Aprovacao({
@@ -89,9 +89,9 @@ export default function Aprovacao({
           })}
         </dl>
       ) : plano && mudancas.length > 0 ? (
-        <ul className="aprovacao__mudancas" aria-label="Mudanças">
-          {mudancas.map((m) => (
-            <li key={m}>{m}</li>
+        <ul className="aprovacao__mudancas" aria-label="Mudanças" tabIndex={0}>
+          {mudancas.map((m, i) => (
+            <li key={i}>{m}</li>
           ))}
         </ul>
       ) : (
