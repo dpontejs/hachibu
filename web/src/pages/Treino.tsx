@@ -115,11 +115,78 @@ export default function Treino() {
   const [iniciando, setIniciando] = useState(false);
 
   // Sessão em andamento e treinos feitos na semana: opcionais (se falhar, a semana aparece sem as marcas).
-  useEffect(() => {
+  const carregarSessoes = useCallback(() => {
     const [de, ate] = semanaAtual();
     api.sessaoAberta().then(setAberta).catch(() => {});
     api.sessoesFeitas(de, ate).then(setFeitas).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    carregarSessoes();
+    // PWA aberto de um dia (ou semana) para o outro: as marcas acompanham.
+    const atualizar = () => document.visibilityState === "visible" && carregarSessoes();
+    document.addEventListener("visibilitychange", atualizar);
+    return () => document.removeEventListener("visibilitychange", atualizar);
+  }, [carregarSessoes]);
+
+  async function resolverAberta(fazer: "finalizar" | "descartar") {
+    if (!aberta) return;
+    if (fazer === "descartar" && !window.confirm("Descartar o treino aberto? As séries marcadas serão apagadas."))
+      return;
+    setErro(null);
+    try {
+      await (fazer === "finalizar" ? api.finalizarSessao(aberta.id) : api.descartarSessao(aberta.id));
+      setAberta(null);
+      carregarSessoes();
+    } catch (e) {
+      setErro(mensagemDeErro(e));
+    }
+  }
+
+  /** Feito nesta semana, com pelo menos uma série (sessão vazia não conta). */
+  const feitoNoDia = (dia: number, data?: string) =>
+    feitas.some((f) => f.plano_dia === dia && f.series > 0 && (data === undefined || f.data === data));
+
+  const hojeIso = isoLocal(new Date());
+  const abertaVelha = aberta !== null && aberta.data !== hojeIso;
+  const blocoSessao = (temTreinoHoje: boolean) => (
+    <div className="treino__iniciar">
+      {aberta && abertaVelha ? (
+        <div className="treino__aberta">
+          <p>
+            Você tem um treino aberto de {aberta.data.slice(8, 10)}/{aberta.data.slice(5, 7)} ({aberta.nome}).
+          </p>
+          <button type="button" className="botao" onClick={() => void resolverAberta("finalizar")}>
+            FINALIZAR ESSE
+          </button>
+          <button type="button" className="treino__livre" onClick={() => navegar(`/treino/sessao/${aberta.id}`)}>
+            continuar
+          </button>
+          <button type="button" className="treino__livre" onClick={() => void resolverAberta("descartar")}>
+            descartar
+          </button>
+        </div>
+      ) : aberta ? (
+        <>
+          <button type="button" className="botao" onClick={() => navegar(`/treino/sessao/${aberta.id}`)}>
+            CONTINUAR TREINO
+          </button>
+          <span className="mudo">em andamento: {aberta.nome}</span>
+        </>
+      ) : (
+        temTreinoHoje && (
+          <button type="button" className="botao" onClick={() => void iniciar(hojeIdx)} disabled={iniciando}>
+            INICIAR TREINO
+          </button>
+        )
+      )}
+      {!aberta && (
+        <button type="button" className="treino__livre" onClick={() => void iniciar()} disabled={iniciando}>
+          treino livre
+        </button>
+      )}
+    </div>
+  );
 
   async function iniciar(planoDia?: number) {
     setIniciando(true);
@@ -197,6 +264,7 @@ export default function Treino() {
             MONTAR COM O COACH
           </button>
         </section>
+        {blocoSessao(false)}
         {erro && (
           <p className="aviso" role="alert">
             {erro}
@@ -260,33 +328,13 @@ export default function Treino() {
         {!hoje.exercicios.length && !hoje.corrida && !hoje.cardio && (
           <p className="mudo">Dia de descanso. Recuperar também é treino.</p>
         )}
-        {feitas.some((f) => f.data === isoLocal(new Date()) && f.plano_dia === hojeIdx) && (
+        {feitoNoDia(hojeIdx, hojeIso) && (
           <p className="treino__feito px">✓ FEITO</p>
         )}
         <Exercicios d={hoje} />
         {hoje.corrida && <Corrida c={hoje.corrida} />}
         {hoje.cardio && <Cardio c={hoje.cardio} />}
-        <div className="treino__iniciar">
-          {aberta ? (
-            <>
-              <button type="button" className="botao" onClick={() => navegar(`/treino/sessao/${aberta.id}`)}>
-                CONTINUAR TREINO
-              </button>
-              <span className="mudo">em andamento: {aberta.nome}</span>
-            </>
-          ) : (
-            hoje.exercicios.length > 0 && (
-              <button type="button" className="botao" onClick={() => void iniciar(hojeIdx)} disabled={iniciando}>
-                INICIAR TREINO
-              </button>
-            )
-          )}
-          {!aberta && (
-            <button type="button" className="treino__livre" onClick={() => void iniciar()} disabled={iniciando}>
-              treino livre
-            </button>
-          )}
-        </div>
+        {blocoSessao(hoje.exercicios.length > 0)}
       </section>
 
       <section aria-labelledby="treino-semana">
@@ -305,7 +353,7 @@ export default function Treino() {
                   <span className="px">{DIAS[d.dia]}</span>
                   <span className="treino__dia-nome">
                     {d.nome}
-                    {feitas.some((f) => f.plano_dia === d.dia) && <span className="treino__ok"> ✓</span>}
+                    {feitoNoDia(d.dia) && <span className="treino__ok"> ✓</span>}
                   </span>
                   {resumo(d) && <span className="mudo">{resumo(d)}</span>}
                 </summary>

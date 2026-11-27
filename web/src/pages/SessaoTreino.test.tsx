@@ -74,9 +74,9 @@ describe("SessaoTreino", () => {
     renderSessao();
     const ex = await screen.findByRole("region", { name: "Supino reto com barra" });
     expect(within(ex).getByText(/última vez: 30 kg × 10, 30 kg × 9/i)).toBeInTheDocument();
-    const cargas = within(ex).getAllByRole("spinbutton", { name: /carga/i });
+    const cargas = within(ex).getAllByRole("textbox", { name: /carga/i });
     expect(cargas).toHaveLength(3);
-    expect(cargas[0]).toHaveValue(30);
+    expect(cargas[0]).toHaveValue("30");
     expect(within(ex).getAllByRole("spinbutton", { name: /reps/i })[1]).toHaveValue(9);
   });
 
@@ -91,7 +91,7 @@ describe("SessaoTreino", () => {
     const user = userEvent.setup();
     renderSessao();
     const ex = await screen.findByRole("region", { name: "Supino reto com barra" });
-    const carga = within(ex).getAllByRole("spinbutton", { name: /carga/i })[0];
+    const carga = within(ex).getAllByRole("textbox", { name: /carga/i })[0];
     await user.clear(carga);
     await user.type(carga, "32.5");
     await user.click(within(ex).getAllByRole("button", { name: /marcar série/i })[0]);
@@ -119,7 +119,7 @@ describe("SessaoTreino", () => {
     renderSessao();
     const ex = await screen.findByRole("region", { name: "Supino reto com barra" });
     await user.click(within(ex).getByRole("button", { name: /\+ série/i }));
-    expect(within(ex).getAllByRole("spinbutton", { name: /carga/i })).toHaveLength(4);
+    expect(within(ex).getAllByRole("textbox", { name: /carga/i })).toHaveLength(4);
   });
 
   it("trocar o exercício só no dia", async () => {
@@ -153,4 +153,59 @@ describe("SessaoTreino", () => {
     expect(resumo).toHaveTextContent("14 séries");
     expect(resumo).toHaveTextContent("4.320 kg");
   });
+
+  it("aceita carga com vírgula", async () => {
+    const chamadas = servidor((u, method) => {
+      if (u === "/api/sessoes/7" && method === "GET") return json(SESSAO);
+      if (u === "/api/sessoes/7/series" && method === "PUT") return json(SESSAO);
+    });
+    const user = userEvent.setup();
+    renderSessao();
+    const ex = await screen.findByRole("region", { name: "Supino reto com barra" });
+    const carga = within(ex).getAllByRole("textbox", { name: /carga/i })[0];
+    await user.clear(carga);
+    await user.type(carga, "32,5");
+    await user.click(within(ex).getAllByRole("button", { name: /marcar série 1/i })[0]);
+    await waitFor(() => expect(chamadas.find((c) => c.method === "PUT")?.body).toMatchObject({ carga_kg: 32.5 }));
+  });
+
+  it("carga inválida não vira peso do corpo: o ✓ fica bloqueado", async () => {
+    servidor((u) => (u === "/api/sessoes/7" ? json(SESSAO) : undefined));
+    const user = userEvent.setup();
+    renderSessao();
+    const ex = await screen.findByRole("region", { name: "Supino reto com barra" });
+    const carga = within(ex).getAllByRole("textbox", { name: /carga/i })[0];
+    await user.clear(carga);
+    await user.type(carga, "3x");
+    expect(within(ex).getAllByRole("button", { name: /marcar série 1/i })[0]).toBeDisabled();
+  });
+
+  it("marcar a série extra não cria mais uma linha", async () => {
+    servidor((u, method, body) => {
+      if (u === "/api/sessoes/7" && method === "GET") return json(SESSAO);
+      if (u === "/api/sessoes/7/series" && method === "PUT") {
+        const b = body as { ordem: number; carga_kg: number; reps: number };
+        return json({ ...SESSAO, exercicios: [{ ...SUPINO, feitas: [{ ordem: b.ordem, carga_kg: b.carga_kg, reps: b.reps }] }] });
+      }
+    });
+    const user = userEvent.setup();
+    renderSessao();
+    const ex = await screen.findByRole("region", { name: "Supino reto com barra" });
+    await user.click(within(ex).getByRole("button", { name: /\+ série/i }));
+    await user.click(within(ex).getByRole("button", { name: /marcar série 4/i }));
+    await within(ex).findByRole("button", { name: /desmarcar série 4/i });
+    expect(within(ex).getAllByRole("textbox", { name: /carga/i })).toHaveLength(4);
+  });
+
+  it("sessão finalizada é só leitura", async () => {
+    const feita = { ...SUPINO, feitas: [{ ordem: 0, carga_kg: 30, reps: 10 }] };
+    servidor((u) =>
+      u === "/api/sessoes/7" ? json({ ...SESSAO, finalizada_em: "2026-11-28T12:00:00Z", exercicios: [feita] }) : undefined,
+    );
+    renderSessao();
+    expect(await screen.findByText(/treino finalizado/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /finalizar/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /marcar série/i })).not.toBeInTheDocument();
+  });
 });
+

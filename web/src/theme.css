@@ -2754,3 +2754,14 @@ input[type="number"] {
   color: var(--acento);
   margin: 0;
 }
+.treino__aberta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.treino__aberta p {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 14px;
+}

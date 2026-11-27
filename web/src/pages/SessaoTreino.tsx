@@ -9,6 +9,13 @@ import {
   type UltimaVez,
 } from "../api";
 
+/** Carga digitada: vazio = peso do corpo (null); "32,5" ou "32.5" = 32.5; qualquer outra coisa = inválida. */
+export function lerCarga(texto: string): number | null | undefined {
+  const t = texto.trim().replace(",", ".");
+  if (t === "") return null;
+  return /^\d{1,4}(\.\d{1,2})?$/.test(t) ? Number(t) : undefined;
+}
+
 const kg = (v: number | null) => (v === null ? "corpo" : `${String(v).replace(".", ",")} kg`);
 const relogio = (s: number) => `${Math.floor(s / 60)}:${String(Math.max(0, s) % 60).padStart(2, "0")}`;
 
@@ -20,10 +27,10 @@ function textoUltima(u: UltimaVez): string {
 /** Valores iniciais de uma linha: o que já foi feito, senão a última vez, senão vazio. */
 function inicial(e: ExercicioSessao, ordem: number): { carga: string; reps: string } {
   const feita = e.feitas.find((f) => f.ordem === ordem);
-  if (feita) return { carga: feita.carga_kg === null ? "" : String(feita.carga_kg), reps: String(feita.reps) };
+  const texto = (c: number | null) => (c === null ? "" : String(c).replace(".", ","));
+  if (feita) return { carga: texto(feita.carga_kg), reps: String(feita.reps) };
   const anterior = e.ultima?.series[ordem] ?? e.ultima?.series.at(-1);
-  if (anterior)
-    return { carga: anterior.carga_kg === null ? "" : String(anterior.carga_kg), reps: String(anterior.reps) };
+  if (anterior) return { carga: texto(anterior.carga_kg), reps: String(anterior.reps) };
   return { carga: "", reps: String(e.reps_min) };
 }
 
@@ -74,19 +81,21 @@ function Buscar({ onEscolher, onFechar }: { onEscolher: (id: string) => void; on
 function Exercicio({
   e,
   ocupado,
+  somenteLeitura,
   onMarcar,
   onDesmarcar,
   onTrocar,
 }: {
   e: ExercicioSessao;
   ocupado: boolean;
+  somenteLeitura: boolean;
   onMarcar: (ordem: number, carga: number | null, reps: number) => void;
   onDesmarcar: (ordem: number) => void;
   onTrocar: (exercicioId: string) => void;
 }) {
   const feitasMax = e.feitas.reduce((m, f) => Math.max(m, f.ordem + 1), 0);
   const [extras, setExtras] = useState(0);
-  const linhas = Math.max(e.series_planejadas, feitasMax) + extras;
+  const linhas = Math.max(e.series_planejadas + extras, feitasMax);
   const [valores, setValores] = useState<Record<number, { carga: string; reps: string }>>({});
   const [trocando, setTrocando] = useState(false);
   const valor = (ordem: number) => valores[ordem] ?? inicial(e, ordem);
@@ -97,12 +106,20 @@ function Exercicio({
     <section className="sessao__exercicio" aria-label={e.nome}>
       <header>
         <h2>{e.nome}</h2>
-        <button type="button" className="sessao__link" onClick={() => setTrocando((t) => !t)} disabled={ocupado}>
-          trocar
-        </button>
+        {!somenteLeitura && (
+          <button
+            type="button"
+            className="sessao__link"
+            onClick={() => setTrocando((t) => !t)}
+            disabled={ocupado}
+          >
+            trocar
+          </button>
+        )}
       </header>
       <p className="mudo sessao__meta">
-        {e.ultima ? textoUltima(e.ultima) : "Primeira vez com este exercício."} · alvo {e.reps_min}–{e.reps_max} reps
+        {e.ultima ? textoUltima(e.ultima) : "Primeira vez com este exercício."} · alvo {e.reps_min}–
+        {e.reps_max} reps
       </p>
       {trocando && (
         <Buscar
@@ -123,14 +140,13 @@ function Exercicio({
               <span className="vt sessao__n">{ordem + 1}</span>
               <label>
                 <input
-                  type="number"
+                  type="text"
                   inputMode="decimal"
-                  step="0.5"
-                  min={0}
                   aria-label={`Carga da série ${ordem + 1} (kg)`}
+                  aria-invalid={lerCarga(v.carga) === undefined}
                   placeholder="kg"
                   value={v.carga}
-                  disabled={feita}
+                  disabled={feita || somenteLeitura}
                   onChange={(ev) => mudar(ordem, "carga", ev.target.value)}
                 />
                 <span className="mudo">kg</span>
@@ -142,31 +158,39 @@ function Exercicio({
                   min={1}
                   aria-label={`Reps da série ${ordem + 1}`}
                   value={v.reps}
-                  disabled={feita}
+                  disabled={feita || somenteLeitura}
                   onChange={(ev) => mudar(ordem, "reps", ev.target.value)}
                 />
                 <span className="mudo">reps</span>
               </label>
-              <button
-                type="button"
-                className={feita ? "sessao__check sessao__check--on" : "sessao__check"}
-                aria-label={feita ? `Desmarcar série ${ordem + 1}` : `Marcar série ${ordem + 1}`}
-                disabled={ocupado || (!feita && !(Number(v.reps) >= 1))}
-                onClick={() =>
-                  feita
-                    ? onDesmarcar(ordem)
-                    : onMarcar(ordem, v.carga.trim() === "" ? null : Number(v.carga), Number(v.reps))
-                }
-              >
-                ✓
-              </button>
+              {!somenteLeitura && (
+                <button
+                  type="button"
+                  className={feita ? "sessao__check sessao__check--on" : "sessao__check"}
+                  aria-label={feita ? `Desmarcar série ${ordem + 1}` : `Marcar série ${ordem + 1}`}
+                  aria-pressed={feita}
+                  disabled={
+                    ocupado ||
+                    (!feita &&
+                      (!(Number.isInteger(Number(v.reps)) && Number(v.reps) >= 1) ||
+                        lerCarga(v.carga) === undefined))
+                  }
+                  onClick={() =>
+                    feita ? onDesmarcar(ordem) : onMarcar(ordem, lerCarga(v.carga) ?? null, Number(v.reps))
+                  }
+                >
+                  ✓
+                </button>
+              )}
             </li>
           );
         })}
       </ol>
-      <button type="button" className="sessao__link" onClick={() => setExtras((n) => n + 1)}>
-        + série
-      </button>
+      {!somenteLeitura && (
+        <button type="button" className="sessao__link" onClick={() => setExtras((n) => n + 1)}>
+          + série
+        </button>
+      )}
     </section>
   );
 }
@@ -223,9 +247,7 @@ export default function SessaoTreino() {
     return (
       <div className="sessao">
         <section className="sessao__resumo" aria-label="Treino concluído">
-          <h1 className="rotulo px">
-            TREINO CONCLUIDO
-          </h1>
+          <h1 className="rotulo px">TREINO CONCLUIDO</h1>
           <p className="vt sessao__resumo-num">{resumo.duracao_min} min</p>
           <p>
             {resumo.series} séries · {resumo.volume_kg.toLocaleString("pt-BR")} kg de volume
@@ -246,6 +268,7 @@ export default function SessaoTreino() {
       <p className="carregando px">CARREGANDO</p>
     );
 
+  const somenteLeitura = sessao.finalizada_em !== null;
   const restante = descansoFim ? Math.round((descansoFim - agora) / 1000) : 0;
   const decorrido = Math.round((agora - new Date(sessao.iniciada_em).getTime()) / 1000);
 
@@ -279,21 +302,26 @@ export default function SessaoTreino() {
           <span className="rotulo px">TREINO</span>
           <h1>{sessao.nome}</h1>
         </div>
-        <span className="vt sessao__tempo" aria-label="Tempo de treino">
-          {relogio(decorrido)}
-        </span>
+        {!somenteLeitura && (
+          <span className="vt sessao__tempo" aria-label="Tempo de treino">
+            {relogio(decorrido)}
+          </span>
+        )}
       </header>
+      {somenteLeitura && <p className="mudo">Treino finalizado: só leitura.</p>}
 
       <label className="sessao__local">
         <span className="mudo">Local</span>
         <input
           list="locais-usados"
+          disabled={somenteLeitura}
           placeholder="ex.: Smart Fit centro (opcional)"
           value={local}
           maxLength={60}
           onChange={(e) => setLocal(e.target.value)}
           onBlur={() => {
-            if ((sessao.local ?? "") !== local.trim()) void acao(() => api.mudarLocal(sessaoId, local.trim() || null));
+            if ((sessao.local ?? "") !== local.trim())
+              void acao(() => api.mudarLocal(sessaoId, local.trim() || null));
           }}
         />
         <datalist id="locais-usados">
@@ -308,21 +336,22 @@ export default function SessaoTreino() {
           key={`${e.ordem}-${e.exercicio_id}`}
           e={e}
           ocupado={ocupado}
+          somenteLeitura={somenteLeitura}
           onMarcar={(ordem, carga, reps) =>
-            void acao(() => api.marcarSerie(sessaoId, { ordem_exercicio: e.ordem, ordem, carga_kg: carga, reps })).then(
-              (ok) => {
-                if (!ok) return;
-                setAgora(Date.now());
-                setDescansoFim(Date.now() + e.descanso_s * 1000);
-              },
-            )
+            void acao(() =>
+              api.marcarSerie(sessaoId, { ordem_exercicio: e.ordem, ordem, carga_kg: carga, reps }),
+            ).then((ok) => {
+              if (!ok) return;
+              setAgora(Date.now());
+              setDescansoFim(Date.now() + e.descanso_s * 1000);
+            })
           }
           onDesmarcar={(ordem) => void acao(() => api.desmarcarSerie(sessaoId, e.ordem, ordem))}
           onTrocar={(novo) => void acao(() => api.trocarExercicio(sessaoId, e.ordem, novo))}
         />
       ))}
 
-      {acrescentando ? (
+      {somenteLeitura ? null : acrescentando ? (
         <Buscar
           onFechar={() => setAcrescentando(false)}
           onEscolher={(novo) => {
@@ -352,14 +381,20 @@ export default function SessaoTreino() {
         </div>
       )}
 
-      <div className="sessao__acoes">
-        <button type="button" className="botao" onClick={() => void finalizar()} disabled={ocupado}>
-          FINALIZAR
+      {somenteLeitura ? (
+        <button type="button" className="botao" onClick={() => navegar("/treino")}>
+          VOLTAR AO TREINO
         </button>
-        <button type="button" className="sessao__link" onClick={() => void descartar()}>
-          descartar treino
-        </button>
-      </div>
+      ) : (
+        <div className="sessao__acoes">
+          <button type="button" className="botao" onClick={() => void finalizar()} disabled={ocupado}>
+            FINALIZAR
+          </button>
+          <button type="button" className="sessao__link" onClick={() => void descartar()} disabled={ocupado}>
+            descartar treino
+          </button>
+        </div>
+      )}
     </div>
   );
 }
