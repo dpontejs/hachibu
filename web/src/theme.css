@@ -1955,3 +1955,131 @@ input[type="number"] {
     transition: none !important;
   }
 }
+
+/* ---------- Landing (boas-vindas) ---------- */
+.landing {
+  min-height: 100svh;
+  background: var(--bg);
+  color: var(--texto);
+}
+.landing__heroi {
+  position: relative;
+  height: min(100svh, 640px);
+  overflow: hidden;
+}
+.cerejeira {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+.landing__texto {
+  position: absolute;
+  z-index: 1;
+  left: clamp(24px, 6vw, 88px);
+  top: 50%;
+  transform: translateY(-50%);
+  max-width: 42%;
+}
+.landing__nome {
+  font-size: clamp(24px, 3.4vw, 40px);
+  letter-spacing: 1px;
+  text-shadow: 3px 3px 0 #0b0c10;
+  margin: 0;
+}
+.landing__lema {
+  margin: 18px 0 0;
+  font-size: 17px;
+  line-height: 1.55;
+  color: #c3c7d2;
+}
+.landing__ctas {
+  display: flex;
+  gap: 10px;
+  margin-top: 24px;
+  flex-wrap: wrap;
+}
+.landing__ctas .botao {
+  text-decoration: none;
+  font-size: 9px;
+  padding: 13px 16px;
+  border-radius: var(--raio-p);
+  border: 1px solid var(--acento);
+  color: var(--acento);
+  background: rgba(18, 20, 26, 0.7);
+}
+.landing__ctas .botao--cheio {
+  background: var(--acento);
+  color: var(--bg);
+}
+.landing__secao {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 56px clamp(20px, 5vw, 40px) 8px;
+}
+.landing__recursos {
+  list-style: none;
+  padding: 0;
+  margin: 18px 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+}
+.landing__recurso {
+  background: var(--card);
+  border-radius: var(--raio);
+  padding: 18px;
+}
+.landing__recurso h3 {
+  font-size: 9px;
+  color: var(--acento);
+  margin: 0 0 10px;
+  line-height: 1.6;
+}
+.landing__recurso p,
+.landing__nomeacao p {
+  margin: 0;
+  color: #c3c7d2;
+  line-height: 1.6;
+}
+.landing__nomeacao p + p {
+  margin-top: 12px;
+}
+.landing__kanji {
+  font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans CJK JP", "Noto Sans JP", "Yu Gothic",
+    "Meiryo", sans-serif;
+  font-size: 44px;
+  color: var(--acento) !important;
+  margin: 14px 0 16px !important;
+  letter-spacing: 6px;
+}
+.landing__rodape {
+  max-width: 980px;
+  margin: 48px auto 0;
+  padding: 18px clamp(20px, 5vw, 40px) 32px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--mudo);
+  border-top: 1px solid var(--linha);
+}
+.landing__rodape a {
+  color: var(--mudo);
+}
+@media (max-width: 700px) {
+  .landing__texto {
+    top: auto;
+    bottom: 40px;
+    transform: none;
+    max-width: none;
+    right: 24px;
+  }
+}
+
+.carregando-app {
+  min-height: 100svh;
+  background: var(--bg);
+}

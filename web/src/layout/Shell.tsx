@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router";
-import { api, type Me } from "../api";
+import { ApiError, api, type Me } from "../api";
 import Coach from "../coach/Coach";
 import { useDesktop } from "../coach/abrir";
 import { Icone, Marca, type NomeIcone } from "../ui";
@@ -27,14 +27,15 @@ export default function Shell() {
   useEffect(() => {
     let vivo = true;
     api
-      .me()
+      .meSemRedirecionar()
       .then((m) => {
         if (!vivo) return;
         setMe(m);
         if (!m.perfil_completo && pathname !== "/perfil") navegar("/perfil", { replace: true });
       })
-      .catch(() => {
-        /* 401 já redirecionou para /entrar */
+      .catch((e) => {
+        // Visitante sem sessão: a landing apresenta o app (o login fica a um toque de lá).
+        if (vivo && e instanceof ApiError && e.status === 401) navegar("/boas-vindas", { replace: true });
       });
     return () => {
       vivo = false;
@@ -49,6 +50,10 @@ export default function Shell() {
   }
 
   const noCoach = pathname === "/coach";
+
+  // Só desenha as telas depois de saber quem é: sem isso, a tela de dentro chamaria a API sem sessão
+  // e cairia no login antes de a landing aparecer.
+  if (!me) return <div className="carregando-app" aria-busy="true" />;
 
   return (
     <div className={noCoach ? "shell shell--coach" : "shell"}>

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useNavigate } from "react-router";
 import { definirNavegacao } from "./api";
 import Shell, { EmBreve, TelaCoach } from "./layout/Shell";
+import BoasVindas from "./pages/BoasVindas";
 import Cadastro from "./pages/Cadastro";
 import Comida from "./pages/Comida";
 import Entrar from "./pages/Entrar";
@@ -22,6 +23,7 @@ function App() {
     <BrowserRouter>
       <LigarNavegacao />
       <Routes>
+        <Route path="/boas-vindas" element={<BoasVindas />} />
         <Route path="/entrar" element={<Entrar />} />
         <Route path="/cadastro" element={<Cadastro />} />
         <Route element={<Shell />}>

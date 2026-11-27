@@ -29,6 +29,10 @@ O design, as decisões e as próximas etapas estão em [`docs/features/hachibu.m
 
 - **TACO**: NEPA-UNICAMP. *Tabela Brasileira de Composição de Alimentos*, 4ª ed. rev. e ampl. Campinas: NEPA-UNICAMP, 2011. A reprodução é permitida com citação da fonte. O app usa 593 dos 597 alimentos: os 4 sem valor de energia na tabela ficam de fora. A conversão parte do JSON de [marcelosanto/tabela_taco](https://github.com/marcelosanto/tabela_taco) (MIT) e está em [`scripts/gerar_taco_csv.py`](scripts/gerar_taco_csv.py); o resultado fica em `src/hachibu/data/taco.csv`.
 
+## Créditos de arte
+
+- **Cerejeira da landing**: pixel art de [Infallible](https://infallible.itch.io/pack-of-sakura-trees), recolorida para a paleta verde do Hachibu (`web/public/sprites/`). As pétalas animadas são desenhadas pelo app.
+
 ## Como rodar
 
 ```bash

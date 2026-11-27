@@ -286,6 +286,8 @@ export const api = {
     request<unknown>("POST", "/auth/login", { email, senha }, { sem401Redirect: true }),
   logout: () => request<void>("POST", "/auth/logout"),
   me: () => request<Me>("GET", "/me"),
+  /** Para o guarda de entrada: 401 aqui significa "visitante", não "sessão expirada". */
+  meSemRedirecionar: () => request<Me>("GET", "/me", undefined, { sem401Redirect: true }),
   /** `null` quando ainda não há perfil (404). */
   async getPerfil(): Promise<{ perfil: Perfil; metas: Metas | null } | null> {
     try {
