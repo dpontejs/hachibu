@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useNavigate } from "react-router";
 import { definirNavegacao } from "./api";
 import Shell, { EmBreve, TelaCoach } from "./layout/Shell";
+import Treino from "./pages/Treino";
 import BoasVindas from "./pages/BoasVindas";
 import Cadastro from "./pages/Cadastro";
 import Comida from "./pages/Comida";
@@ -30,7 +31,7 @@ function App() {
           <Route index element={<Hoje />} />
           <Route path="perfil" element={<Perfil />} />
           <Route path="comida" element={<Comida />} />
-          <Route path="treino" element={<EmBreve titulo="Treino" etapa="Plano semanal e registro de séries chegam na etapa 3." />} />
+          <Route path="treino" element={<Treino />} />
           <Route path="progresso" element={<EmBreve titulo="Progresso" etapa="Peso, streak e histórico chegam na etapa 6." />} />
           <Route path="coach" element={<TelaCoach />} />
           <Route path="*" element={<EmBreve titulo="404" chamada="Nada aqui" etapa="Essa tela não existe." />} />

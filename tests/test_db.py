@@ -1,4 +1,5 @@
 from hachibu.db import connect, migrate
+from tests.conftest import MIGRACOES
 
 TABELAS = {"users", "profiles", "goals", "meals", "water_logs"}
 
@@ -15,22 +16,10 @@ def test_migrate_cria_tabelas(tmp_path):
 
 def test_migrate_idempotente(tmp_path):
     conn = connect(str(tmp_path / "t.db"))
-    assert migrate(conn) == [
-        "001_inicial.sql",
-        "002_alimentos.sql",
-        "003_coach.sql",
-        "004_conversas.sql",
-        "005_memorias.sql",
-    ]
+    assert migrate(conn) == MIGRACOES
     assert migrate(conn) == []
     versoes = [r["name"] for r in conn.execute("SELECT name FROM schema_version")]
-    assert versoes == [
-        "001_inicial.sql",
-        "002_alimentos.sql",
-        "003_coach.sql",
-        "004_conversas.sql",
-        "005_memorias.sql",
-    ]
+    assert versoes == MIGRACOES
 
 
 def test_foreign_keys_ligadas(tmp_path):

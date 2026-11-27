@@ -2,6 +2,7 @@ import sqlite3
 
 from hachibu.alimentos import carregar_taco, normalizar
 from hachibu.db import connect, migrate
+from tests.conftest import MIGRACOES
 
 
 def test_normalizar():
@@ -47,7 +48,7 @@ def test_migracao_002_preserva_dados(tmp_path):
     conn.execute("INSERT INTO goals VALUES (1, 2759, 144, 402, 64, 2800)")
     conn.close()
     conn = connect(caminho)
-    assert migrate(conn) == ["002_alimentos.sql", "003_coach.sql", "004_conversas.sql", "005_memorias.sql"]
+    assert migrate(conn) == MIGRACOES[1:]
     g = conn.execute("SELECT kcal, origem, ajustada_em FROM goals WHERE user_id = 1").fetchone()
     assert (g["kcal"], g["origem"], g["ajustada_em"]) == (2759, "formula", None)
 

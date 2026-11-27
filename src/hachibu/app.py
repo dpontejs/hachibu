@@ -10,6 +10,7 @@ from hachibu import alimentos, auth, diario, memorias, perfil
 from hachibu.coach import rotas as coach_rotas
 from hachibu.config import Settings
 from hachibu.db import connect, migrate
+from hachibu.treino import rotas as treino_rotas
 
 
 def create_app(settings: Settings) -> FastAPI:
@@ -27,6 +28,7 @@ def create_app(settings: Settings) -> FastAPI:
     app.include_router(alimentos.router)
     app.include_router(coach_rotas.router)
     app.include_router(memorias.router)
+    app.include_router(treino_rotas.router)
     app.state.modelo_coach = _modelo_coach(settings)
 
     @app.get("/healthz")

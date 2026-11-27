@@ -30,7 +30,13 @@ export interface Perfil {
   meta_profissional_proteina_g?: number | null;
   meta_profissional_carbo_g?: number | null;
   meta_profissional_gordura_g?: number | null;
+  /** Corrida: nível próprio (vazio = iniciante), quando correr e quantas vezes por semana. */
+  nivel_corrida?: Nivel | null;
+  corrida_quando?: CorridaQuando | null;
+  corridas_semana?: number | null;
 }
+
+export type CorridaQuando = "automatico" | "mesmo_dia" | "dias_separados";
 
 /** De onde veio a meta do dia. */
 export type OrigemMeta = "formula" | "profissional" | "coach";
@@ -165,6 +171,49 @@ export interface ConversaCoach {
   atualizado_em: string;
   /** Há uma proposta esperando aprovar/recusar. */
   pendente: boolean;
+}
+
+// ---------- treino ----------
+
+export interface ExercicioDia {
+  exercicio_id: string;
+  nome: string;
+  grupo: string | null;
+  series: number;
+  reps_min: number;
+  reps_max: number;
+  descanso_s: number;
+}
+
+export interface CorridaDia {
+  /** Vem da semana atual da progressão de iniciante. */
+  progressao: boolean;
+  tipo: "corrida_caminhada" | "leve" | "intervalado" | "longao";
+  duracao_min: number;
+  corre_min: number | null;
+  anda_min: number | null;
+  repeticoes: number | null;
+  esforco_alvo: string;
+}
+
+export interface DiaTreino {
+  dia: number;
+  nome: string;
+  exercicios: ExercicioDia[];
+  corrida: CorridaDia | null;
+}
+
+export interface PlanoTreino {
+  versao: number;
+  origem: "base" | "coach";
+  criado_em: string;
+  semana_corrida: number;
+  dias: DiaTreino[];
+  /** O que deixou de valer com o perfil atual (vazio = plano válido). */
+  avisos: string[];
+  /** O que o plano base não pôde seguir das suas preferências, e por quê. */
+  notas: string[];
+  tem_condicoes: boolean;
 }
 
 export type TipoMemoria = "restricao" | "condicao" | "gosto";
@@ -439,6 +488,17 @@ export const api = {
   criarMemoria: (tipo: TipoMemoria, texto: string) => request<Memoria>("POST", "/memorias", { tipo, texto }),
   editarMemoria: (id: number, texto: string) => request<Memoria>("PATCH", `/memorias/${id}`, { texto }),
   apagarMemoria: (id: number) => request<unknown>("DELETE", `/memorias/${id}`),
+  /** `null` quando ainda não há plano (404). */
+  async plano(): Promise<PlanoTreino | null> {
+    try {
+      return await request<PlanoTreino>("GET", "/plano");
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) return null;
+      throw e;
+    }
+  },
+  gerarPlano: (substituir = false) =>
+    request<unknown>("POST", substituir ? "/plano/base?substituir=true" : "/plano/base"),
   coachConversas: () => request<{ conversas: ConversaCoach[] }>("GET", "/coach/conversas"),
   /** `null` quando a thread não existe ou não é do usuário (404): vira conversa nova. */
   async coachHistorico(threadId: string): Promise<RespostaCoach | null> {
@@ -462,6 +522,7 @@ export function mensagemDeErro(e: unknown): string | null {
     if (e.status === 503 && e.detail === "coach_indisponivel") return MSG_COACH_FORA;
     if (e.status === 409 && e.detail === "aprovacao_pendente")
       return "Responda o pedido acima (aprovar ou recusar) antes de mandar outra mensagem.";
+    if (e.detail === "plano_existente") return "Você já tem um plano (talvez criado em outra aba). Recarregue a tela.";
     if (e.detail === "memoria_repetida") return "Isso já está na lista.";
     if (e.detail === "limite_de_memorias") return "A lista desse tipo está cheia. Apague algo que não vale mais.";
     if (e.detail === "memoria_inexistente") return "Essa memória não existe mais.";
