@@ -18,6 +18,7 @@ const PLANO = {
   criado_em: "2026-11-28T10:00:00Z",
   semana_corrida: 1,
   avisos: [] as string[],
+  notas: [] as string[],
   tem_condicoes: false,
   dias: [
     {
@@ -118,6 +119,7 @@ describe("Treino", () => {
     const user = userEvent.setup();
     renderTreino();
     expect(await screen.findByText(/precisa de outro equipamento/)).toBeInTheDocument();
+    expect(screen.getByText(/o plano não cabe no seu perfil atual/i)).toBeInTheDocument();
     const botao = screen.getByRole("button", { name: /gerar novo plano base/i });
     await user.click(botao);
     expect(chamadas.some((c) => c.url.startsWith("/api/plano/base"))).toBe(false);
@@ -127,4 +129,48 @@ describe("Treino", () => {
     );
     expect(confirmar).toHaveBeenCalledTimes(2);
   });
+
+  it("mostra as notas do que o plano base não pôde seguir", async () => {
+    servidor((u) =>
+      u === "/api/plano" ? json({ ...PLANO, notas: ["Você pediu 3 corridas por semana; ficaram 2."] }) : undefined,
+    );
+    renderTreino();
+    expect(await screen.findByText(/ficaram 2/)).toBeInTheDocument();
+  });
+
+  it("se carregar falhar, oferece tentar de novo", async () => {
+    let falhar = true;
+    servidor((u) => (u === "/api/plano" ? (falhar ? json({ detail: "x" }, 500) : json(PLANO)) : undefined));
+    const user = userEvent.setup();
+    renderTreino();
+    const tentar = await screen.findByRole("button", { name: /tentar de novo/i });
+    falhar = false;
+    await user.click(tentar);
+    expect(await screen.findByRole("region", { name: /hoje/i })).toBeInTheDocument();
+  });
+
+  it("marca o dia de hoje e atualiza ao voltar depois da meia-noite", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: new Date("2026-11-30T23:59:00") }); // segunda
+    servidor((u) => (u === "/api/plano" ? json(PLANO) : undefined));
+    renderTreino();
+    expect(await screen.findByText(/HOJE · SEG/)).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: /semana/i }).querySelector('[aria-current="date"]')).toHaveTextContent(
+      "SEG",
+    );
+    vi.setSystemTime(new Date("2026-12-01T08:00:00")); // terça
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(await screen.findByText(/HOJE · TER/)).toBeInTheDocument();
+  });
+
+  it("plano já existente (outra aba) vira mensagem em português", async () => {
+    servidor((u, init) => {
+      if (u === "/api/plano" && init?.method !== "POST") return json({ detail: "plano_inexistente" }, 404);
+      if (u === "/api/plano/base") return json({ detail: "plano_existente" }, 409);
+    });
+    const user = userEvent.setup();
+    renderTreino();
+    await user.click(await screen.findByRole("button", { name: /montar meu plano/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/já tem um plano/i);
+  });
 });
+

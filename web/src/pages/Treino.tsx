@@ -5,6 +5,9 @@ import { api, mensagemDeErro, type CorridaDia, type DiaTreino, type PlanoTreino 
 const DIAS = ["SEG", "TER", "QUA", "QUI", "SEX", "SAB", "DOM"];
 const SEMANAS_PROGRESSAO = 9;
 
+/** 0 = segunda, pelo relógio do aparelho (o fuso de quem treina). */
+const diaDeHoje = () => (new Date().getDay() + 6) % 7;
+
 const minutos = (n: number) => `${String(n).replace(".", ",")} min`;
 
 /** Texto da corrida do dia: blocos de corrida e caminhada, ou tipo e duração. */
@@ -58,6 +61,7 @@ export default function Treino() {
   const [plano, setPlano] = useState<PlanoTreino | null | undefined>(undefined);
   const [erro, setErro] = useState<string | null>(null);
   const [gerando, setGerando] = useState(false);
+  const [hojeIdx, setHojeIdx] = useState(diaDeHoje);
 
   const carregar = useCallback(async () => {
     try {
@@ -71,6 +75,13 @@ export default function Treino() {
   useEffect(() => {
     void carregar();
   }, [carregar]);
+
+  // PWA aberto de um dia para o outro: o "hoje" muda quando a tela volta.
+  useEffect(() => {
+    const atualizar = () => document.visibilityState === "visible" && setHojeIdx(diaDeHoje());
+    document.addEventListener("visibilitychange", atualizar);
+    return () => document.removeEventListener("visibilitychange", atualizar);
+  }, []);
 
   async function gerar(substituir: boolean) {
     if (substituir && !window.confirm("Gerar um plano base novo a partir do seu perfil? O plano atual fica no histórico."))
@@ -116,12 +127,17 @@ export default function Treino() {
 
   if (!plano)
     return (
-      <p className="aviso" role="alert">
-        {erro}
-      </p>
+      <div className="treino">
+        <h1 className="rotulo px">TREINO</h1>
+        <p className="aviso" role="alert">
+          {erro}
+        </p>
+        <button type="button" className="botao" onClick={() => void carregar()}>
+          TENTAR DE NOVO
+        </button>
+      </div>
     );
 
-  const hojeIdx = (new Date().getDay() + 6) % 7;
   const hoje = plano.dias[hojeIdx];
   const temProgressao = plano.dias.some((d) => d.corrida?.progressao);
 
@@ -138,7 +154,7 @@ export default function Treino() {
 
       {plano.avisos.length > 0 && (
         <section className="aviso treino__avisos" role="status">
-          <p>Seu perfil mudou e o plano não cabe mais nele:</p>
+          <p>O plano não cabe no seu perfil atual:</p>
           <ul>
             {plano.avisos.map((a) => (
               <li key={a}>{a}</li>
@@ -149,6 +165,14 @@ export default function Treino() {
           </button>
           <p className="mudo">Ou peça ao coach para adaptar o plano atual.</p>
         </section>
+      )}
+
+      {plano.notas.length > 0 && (
+        <ul className="treino__notas mudo" aria-label="Notas do plano">
+          {plano.notas.map((n) => (
+            <li key={n}>{n}</li>
+          ))}
+        </ul>
       )}
 
       {plano.tem_condicoes && (
@@ -173,7 +197,11 @@ export default function Treino() {
         </h2>
         <ul className="treino__dias" aria-label="Semana">
           {plano.dias.map((d) => (
-            <li key={d.dia} className={d.dia === hojeIdx ? "treino__dia treino__dia--hoje" : "treino__dia"}>
+            <li
+              key={d.dia}
+              className={d.dia === hojeIdx ? "treino__dia treino__dia--hoje" : "treino__dia"}
+              aria-current={d.dia === hojeIdx ? "date" : undefined}
+            >
               <details>
                 <summary>
                   <span className="px">{DIAS[d.dia]}</span>

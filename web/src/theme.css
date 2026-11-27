@@ -2496,3 +2496,8 @@ input[type="number"] {
   margin: 0;
   font-size: 14px;
 }
+.treino__notas {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 14px;
+}

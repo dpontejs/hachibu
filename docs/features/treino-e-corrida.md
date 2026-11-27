@@ -24,7 +24,7 @@ A aba TREINO passa a ter o plano da semana (musculação e corrida juntas) e o r
   - A divisão vem de `dias_semana`: 2 ou 3 dias dão corpo inteiro A/B; 4 ou mais dão superior/inferior, com até 4 dias de musculação.
   - As séries e repetições vêm do `nivel`, e a duração de `minutos_sessao`.
   - Os exercícios vêm do catálogo, filtrados pelo `equipamento`.
-  - A corrida para `iniciante` usa a tabela de progressão de corrida e caminhada (`PROGRESSAO_INICIANTE`): 9 semanas, 3 sessões por semana, de "1 min correndo / 2 min andando × 7" até "30 min contínuos", sempre com 5 min de caminhada de aquecimento.
+  - A corrida para `iniciante` usa a tabela de progressão de corrida e caminhada (`PROGRESSAO_INICIANTE`): 9 semanas, 3 sessões por semana, de "1 min correndo / 2 min andando × 7" até "25 min contínuos", com o tempo correndo subindo no máximo 50% por semana, sempre com 5 min de caminhada de aquecimento.
   - Para intermediário ou avançado, a corrida é 2 a 3 sessões leves por tempo, com uma mais longa.
   - As corridas vão nos dias sem perna pesada. Há pelo menos 1 dia de descanso total.
 - **Nível de corrida separado** *(decisão do builder)*: campo opcional novo no perfil, `nivel_corrida: iniciante | intermediario | avancado`. Se ficar vazio, vale `iniciante`. Dá para ser intermediário na musculação e iniciante na corrida.
@@ -53,11 +53,15 @@ A aba TREINO passa a ter o plano da semana (musculação e corrida juntas) e o r
 
 1. Todo exercício existe no catálogo ou nos exercícios próprios, e cabe no `equipamento` do perfil.
 2. Há pelo menos 1 dia de descanso total. O número de dias com treino é no máximo `dias_semana`.
-3. A duração estimada da musculação, `Σ séries × (40 s + descanso)`, é no máximo `minutos_sessao` × 1,15.
+3. A duração estimada do dia, `Σ séries × (40 s + descanso)` mais a corrida (inclusive em dia só de corrida), é no máximo `minutos_sessao` × 1,15.
 4. Não há intervalado nem longão no dia seguinte a um dia com 6 ou mais séries de pernas.
 5. O volume de corrida da semana (minutos) é no máximo 1,10 × o da versão anterior. A primeira versão é livre.
-6. O longão tem no máximo 40% do volume semanal de corrida (o limite de 30% da skill vale de 3 corridas por semana em diante).
+6. O longão tem no máximo 40% do volume semanal de corrida. Com 3 corridas de 30 min, um teto de 30% deixaria o longão menor que a leve, por isso vale 40%.
 7. Séries por grupo muscular na semana: no máximo 25. Séries e repetições dentro de faixas sãs (1–10 séries, 1–30 repetições).
+8. Intervalado e longão nunca em dias seguidos.
+9. O mesmo exercício não aparece duas vezes no mesmo dia.
+
+O plano base nunca grava um plano que reprove nessas regras (`POST /plano/base` valida antes, nas semanas 1 e 9). O que ele não pôde seguir das preferências (corridas a menos para sobrar musculação, corrida em dias separados por falta de tempo, corrida fora por falta de tempo) vira **nota** gravada com a versão e mostrada na tela.
 
 ## Contratos
 
