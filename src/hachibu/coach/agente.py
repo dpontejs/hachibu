@@ -169,3 +169,12 @@ def historico(settings: Settings, modelo, user_id: int, thread_id: str) -> Respo
     estado = agente.get_state({"configurable": {"thread_id": thread_id}})
     pendente = Pendente(**estado.interrupts[0].value) if estado.interrupts else None
     return RespostaCoach(montar_mensagens(estado.values.get("messages", [])), pendente)
+
+
+def primeira_fala(settings: Settings, thread_id: str) -> str | None:
+    """Primeira fala do aluno na thread, lida direto do checkpointer (sem modelo). None se não há mensagem."""
+    estado = _checkpointer(settings).get({"configurable": {"thread_id": thread_id}})
+    falas = [
+        m for m in (estado or {}).get("channel_values", {}).get("messages", []) if isinstance(m, HumanMessage)
+    ]
+    return falas[0].text.replace(MARCA_FOTO, "") if falas else None
