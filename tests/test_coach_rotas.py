@@ -28,6 +28,7 @@ def test_conversa_basica(app, aluno):
         "papel": "coach",
         "texto": "Anotado!",
         "ferramentas": ["registrar_agua"],
+        "foto": False,
     }
     h = aluno.get(f"/api/coach/{corpo['thread_id']}").json()
     assert h["mensagens"] == corpo["mensagens"]

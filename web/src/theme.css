@@ -2359,3 +2359,18 @@ input[type="number"] {
   border-color: var(--acento);
   box-shadow: 0 0 0 3px var(--acento-fundo);
 }
+
+/* ---------- coach em tempo real ---------- */
+.pensando__frase {
+  font-size: 14px;
+  line-height: 1.3;
+}
+.msg__selo {
+  align-self: flex-start;
+  font-size: 7px;
+  color: var(--acento);
+  border: 1px solid var(--acento-sombra);
+  border-radius: 4px;
+  padding: 3px 5px;
+  margin-bottom: 4px;
+}

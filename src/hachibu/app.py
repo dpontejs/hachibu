@@ -1,5 +1,6 @@
 """Fábrica da aplicação FastAPI."""
 
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -71,4 +72,11 @@ def _servir_spa(app: FastAPI, dist: Path) -> None:
 
 
 def from_env() -> FastAPI:
+    """Entrada de produção: liga o log INFO do app (o do uvicorn não cobre os loggers `hachibu.*`)."""
+    raiz = logging.getLogger("hachibu")
+    if not raiz.handlers:
+        manipulador = logging.StreamHandler()
+        manipulador.setFormatter(logging.Formatter("%(levelname)s:     %(name)s %(message)s"))
+        raiz.addHandler(manipulador)
+    raiz.setLevel(logging.INFO)
     return create_app(Settings.from_env())

@@ -129,6 +129,8 @@ export interface MensagemCoach {
   texto: string;
   /** Tools usadas para produzir a resposta; `skill:<nome>` para skills carregadas. */
   ferramentas: string[];
+  /** A mensagem tinha foto (a foto em si não é guardada). */
+  foto?: boolean;
 }
 
 export interface ArgsAjusteMetas {
@@ -148,6 +150,8 @@ export interface PendenciaCoach {
 
 export interface RespostaCoach {
   thread_id: string;
+  /** O servidor ainda está respondendo esta conversa (o app saiu no meio): consulte de novo. */
+  processando?: boolean;
   /** A conversa inteira da thread. */
   mensagens: MensagemCoach[];
   pendente: PendenciaCoach | null;
@@ -172,6 +176,47 @@ export interface Memoria {
   texto: string;
   origem: "coach" | "aluno";
   criado_em: string;
+}
+
+/** A conexão caiu antes da resposta (rede, app em segundo plano): o servidor pode ter terminado mesmo assim. */
+export class ConexaoPerdida extends Error {
+  constructor() {
+    super("conexão perdida");
+  }
+}
+
+/** Lê um corpo SSE: chama `aoEvento(tipo, dado)` para cada evento; comentários (`: vivo`) são ignorados. */
+async function lerEventos(
+  resp: Response,
+  aoEvento: (tipo: string, dado: unknown) => void,
+  aoSinal?: () => void,
+): Promise<void> {
+  const leitor = resp.body?.getReader();
+  const decodificador = new TextDecoder();
+  let resto = "";
+  const processar = (bloco: string) => {
+    let tipo = "message";
+    const dados: string[] = [];
+    for (const linha of bloco.split("\n")) {
+      if (linha.startsWith("event: ")) tipo = linha.slice(7);
+      else if (linha.startsWith("data: ")) dados.push(linha.slice(6));
+    }
+    if (dados.length) aoEvento(tipo, JSON.parse(dados.join("\n")));
+  };
+  if (!leitor) {
+    (await resp.text()).split("\n\n").forEach(processar);
+    return;
+  }
+  for (;;) {
+    const { done, value } = await leitor.read();
+    if (done) break;
+    aoSinal?.();
+    resto += decodificador.decode(value, { stream: true });
+    const blocos = resto.split("\n\n");
+    resto = blocos.pop() ?? "";
+    blocos.forEach(processar);
+  }
+  if (resto.trim()) processar(resto);
 }
 
 export class ApiError extends Error {
@@ -269,7 +314,10 @@ async function request<T>(
     init.body = JSON.stringify(corpo);
   }
   const resp = await fetch(`/api${caminho}`, init);
+  return lerResposta<T>(resp, opcoes);
+}
 
+async function lerResposta<T>(resp: Response, opcoes: Opcoes = {}): Promise<T> {
   if (resp.status === 204) return undefined as T;
 
   let dados: unknown = null;
@@ -328,12 +376,58 @@ export const api = {
   buscarAlimentos: (q: string) => request<Alimento[]>("GET", `/alimentos?q=${encodeURIComponent(q)}`),
   addRefeicaoTaco: (r: RefeicaoTacoIn) => request<unknown>("POST", "/refeicoes", r),
   diagnostico: () => request<Diagnostico>("GET", "/diagnostico"),
-  coachEnviar(mensagem: string, foto?: File | Blob | null, threadId?: string | null) {
+  /**
+   * Envia ao coach recebendo os passos em tempo real (`aoPasso` com o nome de cada ferramenta).
+   * Conexão que cai antes do fim vira `ConexaoPerdida`: a resposta pode ser recuperada pelo histórico.
+   */
+  async coachEnviar(
+    mensagem: string,
+    foto?: File | Blob | null,
+    threadId?: string | null,
+    opcoes: {
+      aoPasso?: (ferramenta: string) => void;
+      /** Chamado a cada pedaço recebido (inclui as batidas de 15 s): mostra que a conexão está viva. */
+      aoSinal?: () => void;
+      sinal?: AbortSignal;
+    } = {},
+  ): Promise<RespostaCoach> {
+    const { aoPasso, aoSinal, sinal } = opcoes;
     const corpo = new FormData();
     corpo.append("mensagem", mensagem);
     if (foto) corpo.append("foto", foto, foto instanceof File ? foto.name : "foto.jpg");
     if (threadId) corpo.append("thread_id", threadId);
-    return request<RespostaCoach>("POST", "/coach", corpo);
+    let resp: Response;
+    try {
+      resp = await fetch("/api/coach", {
+        method: "POST",
+        credentials: "include",
+        headers: { Accept: "text/event-stream" },
+        body: corpo,
+        signal: sinal,
+      });
+    } catch {
+      throw new ConexaoPerdida();
+    }
+    aoSinal?.();
+    if (!resp.ok || !(resp.headers.get("content-type") ?? "").includes("text/event-stream"))
+      return lerResposta<RespostaCoach>(resp);
+    let fim: RespostaCoach | null = null;
+    let erro: ApiError | null = null;
+    try {
+      await lerEventos(resp, (tipo, dado) => {
+        if (tipo === "passo") aoPasso?.((dado as { ferramenta: string }).ferramenta);
+        else if (tipo === "fim") fim = dado as RespostaCoach;
+        else if (tipo === "erro") {
+          const { status, detail } = dado as { status: number; detail: unknown };
+          erro = new ApiError(status, detail);
+        }
+      }, aoSinal);
+    } catch {
+      throw new ConexaoPerdida();
+    }
+    if (erro) throw erro;
+    if (!fim) throw new ConexaoPerdida();
+    return fim;
   },
   coachDecidir: (threadId: string, aprovar: boolean, motivo?: string) =>
     request<RespostaCoach>(
