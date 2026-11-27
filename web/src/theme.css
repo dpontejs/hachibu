@@ -1993,7 +1993,7 @@ input[type="number"] {
   margin: 0;
   display: flex;
   align-items: center;
-  gap: 0.45em;
+  gap: 0.2em;
   flex-wrap: wrap;
   font-size: clamp(24px, 3.4vw, 40px);
   font-weight: 400;
