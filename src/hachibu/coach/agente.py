@@ -169,3 +169,24 @@ def historico(settings: Settings, modelo, user_id: int, thread_id: str) -> Respo
     estado = agente.get_state({"configurable": {"thread_id": thread_id}})
     pendente = Pendente(**estado.interrupts[0].value) if estado.interrupts else None
     return RespostaCoach(montar_mensagens(estado.values.get("messages", [])), pendente)
+
+
+@dataclass
+class ResumoThread:
+    primeira_fala: str
+    pendente: bool
+
+
+def resumir_threads(
+    settings: Settings, modelo, user_id: int, thread_ids: list[str]
+) -> dict[str, ResumoThread]:
+    """Primeira fala do aluno e se há proposta pendente. Threads sem mensagem salva ficam de fora."""
+    agente = _agente(settings, modelo, user_id, lambda: datetime.now(UTC))
+    resumos: dict[str, ResumoThread] = {}
+    for thread_id in thread_ids:
+        estado = agente.get_state({"configurable": {"thread_id": thread_id}})
+        falas = [m for m in estado.values.get("messages", []) if isinstance(m, HumanMessage)]
+        if falas:
+            primeira = falas[0].text.replace(MARCA_FOTO, "")
+            resumos[thread_id] = ResumoThread(primeira, bool(estado.interrupts))
+    return resumos

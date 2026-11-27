@@ -109,7 +109,7 @@ export default function BoasVindas() {
           腹八分
         </p>
         <p>
-          Em Okinawa existe um costume antigo: comer até a barriga estar oito partes cheia, de dez.{" "}
+          Em Okinawa, existe um costume antigo: comer até a barriga estar oito partes cheia, de dez.{" "}
           <em>Hara hachi bu</em> quer dizer exatamente isso. É uma ideia de equilíbrio, não de restrição: parar
           um pouco antes, todo dia, sem sofrer.
         </p>

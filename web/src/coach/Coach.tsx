@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
-import { api, ApiError, mensagemDeErro, type MensagemCoach, type PendenciaCoach, type RespostaCoach } from "../api";
+import { api, ApiError, mensagemDeErro, type ConversaCoach, type MensagemCoach, type PendenciaCoach, type RespostaCoach } from "../api";
 import { Icone } from "../ui";
 import { EVENTO_FOTO, gravarThread, lerThread } from "./abrir";
 import Aprovacao from "./Aprovacao";
@@ -107,6 +107,42 @@ async function reduzir(foto: File): Promise<File> {
   return new File([blob], foto.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
 }
 
+function quando(iso: string): string {
+  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+}
+
+function Conversas({
+  conversas,
+  atual,
+  onAbrir,
+}: {
+  conversas: ConversaCoach[];
+  atual: string | null;
+  onAbrir: (id: string) => void;
+}) {
+  if (conversas.length === 0)
+    return <p className="mudo coach__sem-conversas">Nenhuma conversa ainda. Mande a primeira mensagem!</p>;
+  return (
+    <ul className="conversas" aria-label="Conversas anteriores">
+      {conversas.map((c) => (
+        <li key={c.thread_id}>
+          <button
+            type="button"
+            className={c.thread_id === atual ? "conversa conversa--atual" : "conversa"}
+            onClick={() => onAbrir(c.thread_id)}
+          >
+            <span className="conversa__titulo">{c.titulo}</span>
+            <span className="conversa__meta">
+              {c.pendente && <span className="conversa__pendente px">FALTA APROVAR</span>}
+              <span className="vt">{quando(c.atualizado_em)}</span>
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 interface Envio {
   texto: string;
   previa: string | null;
@@ -130,6 +166,9 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
   const [previaQuebrada, setPreviaQuebrada] = useState(false);
   const [dicaCamera, setDicaCamera] = useState(abrirCamera);
   const [chamado, setChamado] = useState(false);
+  /** `null`: painel na conversa; lista: painel mostrando as conversas anteriores. */
+  const [conversas, setConversas] = useState<ConversaCoach[] | null>(null);
+  const [listando, setListando] = useState(false);
 
   const lista = useRef<HTMLDivElement>(null);
   const seletor = useRef<HTMLInputElement>(null);
@@ -296,6 +335,29 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
     campo.current?.focus();
   }
 
+  async function verConversas() {
+    if (ocupado || listando) return;
+    setListando(true);
+    setErro(null);
+    try {
+      setConversas((await api.coachConversas()).conversas);
+    } catch (e) {
+      setErro(mensagemDeErro(e));
+    } finally {
+      setListando(false);
+    }
+  }
+
+  function abrirConversa(id: string) {
+    setConversas(null);
+    setErro(null);
+    if (id === threadId) return;
+    setMensagens([]);
+    setPendente(null);
+    setCarregando(true);
+    void recarregar(id);
+  }
+
   function aoEnviar(ev: FormEvent) {
     ev.preventDefault();
     void enviar();
@@ -312,19 +374,57 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
   // Sem esperar o histórico carregar, uma mensagem poderia furar uma aprovação pendente.
   const podeEnviar = !ocupado && !bloqueado && !carregando && (texto.trim() !== "" || foto !== null);
 
+  const topo = (
+    <header className="coach__topo">
+      <span className="coach__marca">
+        <span className="coach__luz" aria-hidden="true" />
+        <span className="rotulo px">COACH</span>
+      </span>
+      <span className="coach__acoes">
+        {conversas ? (
+          <button type="button" className="coach__nova px" onClick={() => setConversas(null)}>
+            VOLTAR
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="coach__nova px"
+              onClick={() => void verConversas()}
+              disabled={ocupado || listando}
+            >
+              CONVERSAS
+            </button>
+            {(mensagens.length > 0 || threadId) && (
+              <button
+                type="button"
+                className="coach__nova px"
+                aria-label="Nova conversa"
+                onClick={novaConversa}
+                disabled={ocupado}
+              >
+                + NOVA
+              </button>
+            )}
+          </>
+        )}
+      </span>
+    </header>
+  );
+
+  if (conversas)
+    return (
+      <div className="coach">
+        {topo}
+        <div className="coach__lista">
+          <Conversas conversas={conversas} atual={threadId} onAbrir={abrirConversa} />
+        </div>
+      </div>
+    );
+
   return (
     <div className={chamado ? "coach coach--chamado" : "coach"}>
-      <header className="coach__topo">
-        <span className="coach__marca">
-          <span className="coach__luz" aria-hidden="true" />
-          <span className="rotulo px">COACH</span>
-        </span>
-        {(mensagens.length > 0 || threadId) && (
-          <button type="button" className="coach__nova px" onClick={novaConversa} disabled={ocupado}>
-            + NOVA CONVERSA
-          </button>
-        )}
-      </header>
+      {topo}
 
       <div className="coach__lista" ref={lista} aria-live="polite">
         {carregando && mensagens.length === 0 && <p className="carregando px">CARREGANDO</p>}

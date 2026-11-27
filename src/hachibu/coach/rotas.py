@@ -11,13 +11,15 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from hachibu.auth import UserId
-from hachibu.coach.agente import AprovacaoPendente, RespostaCoach, historico, responder
+from hachibu.coach.agente import AprovacaoPendente, RespostaCoach, historico, responder, resumir_threads
 from hachibu.coach.foto import TAMANHO_MAXIMO, validar_foto
 from hachibu.db import Db
 from hachibu.diario import hoje
 
 router = APIRouter(prefix="/api/coach")
 log = logging.getLogger("hachibu.coach")
+TAMANHO_TITULO = 60
+LIMITE_CONVERSAS = 50
 
 
 class DecisaoIn(BaseModel):
@@ -50,6 +52,19 @@ def _contar_uso(db, request: Request, user_id: int) -> None:
         "INSERT INTO coach_uso (user_id, data, mensagens) VALUES (?, ?, 1) "
         "ON CONFLICT(user_id, data) DO UPDATE SET mensagens = mensagens + 1",
         (user_id, dia),
+    )
+
+
+def titulo_de(fala: str) -> str:
+    """Começo da primeira fala, numa linha só, cortado em 60 caracteres."""
+    texto = " ".join(fala.split())
+    return texto if len(texto) <= TAMANHO_TITULO else texto[: TAMANHO_TITULO - 1].rstrip() + "…"
+
+
+def _tocar(db, thread_id: str) -> None:
+    db.execute(
+        "UPDATE coach_threads SET atualizado_em = ? WHERE thread_id = ?",
+        (datetime.now(UTC).isoformat(), thread_id),
     )
 
 
@@ -100,10 +115,14 @@ async def conversar(
     _contar_uso(db, request, user_id)
     if not thread_id:
         thread_id = uuid.uuid4().hex
+        agora = datetime.now(UTC).isoformat()
         db.execute(
-            "INSERT INTO coach_threads (thread_id, user_id, criado_em) VALUES (?, ?, ?)",
-            (thread_id, user_id, datetime.now(UTC).isoformat()),
+            "INSERT INTO coach_threads (thread_id, user_id, criado_em, atualizado_em, titulo) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (thread_id, user_id, agora, agora, titulo_de(mensagem)),
         )
+    else:
+        _tocar(db, thread_id)
     settings = request.app.state.settings
     # O agente é síncrono e a chamada ao modelo leva segundos: fora do event loop.
     r = await run_in_threadpool(
@@ -120,7 +139,40 @@ def decidir(thread_id: str, dados: DecisaoIn, request: Request, user_id: UserId,
     if historico(settings, modelo, user_id, thread_id).pendente is None:
         raise HTTPException(409, "nada_para_decidir")
     decisao = {"aprovar": dados.aprovar, "motivo": dados.motivo}
+    _tocar(db, thread_id)
     return _saida(thread_id, _chamar(responder, settings, modelo, user_id, thread_id, decisao=decisao))
+
+
+# Declarada antes de /{thread_id}: senão "conversas" seria lido como o id de uma thread.
+@router.get("/conversas")
+def listar(request: Request, user_id: UserId, db: Db) -> dict:
+    modelo = _modelo(request)
+    linhas = db.execute(
+        "SELECT thread_id, titulo, criado_em, atualizado_em FROM coach_threads WHERE user_id = ? "
+        "ORDER BY atualizado_em DESC, criado_em DESC LIMIT ?",
+        (user_id, LIMITE_CONVERSAS),
+    ).fetchall()
+    resumos = resumir_threads(request.app.state.settings, modelo, user_id, [r["thread_id"] for r in linhas])
+    saida = []
+    for r in linhas:
+        resumo = resumos.get(r["thread_id"])
+        if resumo is None:
+            continue  # o modelo falhou antes de salvar qualquer mensagem: não há o que reabrir
+        titulo = r["titulo"]
+        if not titulo:
+            # Conversa de antes da lista existir: o título sai da primeira fala salva.
+            titulo = titulo_de(resumo.primeira_fala)
+            db.execute("UPDATE coach_threads SET titulo = ? WHERE thread_id = ?", (titulo, r["thread_id"]))
+        saida.append(
+            {
+                "thread_id": r["thread_id"],
+                "titulo": titulo,
+                "criado_em": r["criado_em"],
+                "atualizado_em": r["atualizado_em"],
+                "pendente": resumo.pendente,
+            }
+        )
+    return {"conversas": saida}
 
 
 @router.get("/{thread_id}")

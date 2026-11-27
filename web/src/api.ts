@@ -153,6 +153,16 @@ export interface RespostaCoach {
   pendente: PendenciaCoach | null;
 }
 
+export interface ConversaCoach {
+  thread_id: string;
+  /** Começo da primeira mensagem do aluno. */
+  titulo: string;
+  criado_em: string;
+  atualizado_em: string;
+  /** Há uma proposta esperando aprovar/recusar. */
+  pendente: boolean;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly detail: unknown;
@@ -320,6 +330,7 @@ export const api = {
       `/coach/${encodeURIComponent(threadId)}/decisao`,
       motivo?.trim() ? { aprovar, motivo: motivo.trim() } : { aprovar },
     ),
+  coachConversas: () => request<{ conversas: ConversaCoach[] }>("GET", "/coach/conversas"),
   /** `null` quando a thread não existe ou não é do usuário (404): vira conversa nova. */
   async coachHistorico(threadId: string): Promise<RespostaCoach | null> {
     try {
