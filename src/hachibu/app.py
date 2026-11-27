@@ -42,7 +42,8 @@ def _modelo_coach(settings: Settings):
         return None
     from langchain.chat_models import init_chat_model
 
-    return init_chat_model(settings.coach_modelo, api_key=settings.gemini_api_key, temperature=0.3)
+    # O Gemini 3.x usa amostragem fixa e ignora temperature; por isso não passamos.
+    return init_chat_model(settings.coach_modelo, api_key=settings.gemini_api_key)
 
 
 def _servir_spa(app: FastAPI, dist: Path) -> None:

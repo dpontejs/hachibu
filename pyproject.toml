@@ -26,7 +26,8 @@ packages = ["src/hachibu"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q -m 'not llm'"
+markers = ["llm: conversa real com o Gemini (precisa de GEMINI_API_KEY; fora do make test)"]
 # Starlette sugere httpx2; httpx fica até a troca (mesma decisão do repo today).
 filterwarnings = ["ignore:Using `httpx` with `starlette.testclient` is deprecated"]
 
