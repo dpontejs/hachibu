@@ -70,6 +70,9 @@ export default function Cerejeira() {
             f.fillRect(x, y, 1, chao - y);
           }
         }
+        // Árvore do fundo antes do chão: a raiz fica na mesma linha da árvore da frente,
+        // e o chão cobre qualquer pixel que passar dela.
+        if (!retrato) f.drawImage(fundoArvore, Math.round(W * 0.42), chao - fundoArvore.height + 2);
         // Chão com grama, tufos e florzinhas.
         f.fillStyle = "#0e1014";
         f.fillRect(0, chao, W, 8);
@@ -92,7 +95,6 @@ export default function Cerejeira() {
         // No celular a árvore fica centralizada no alto; no computador, à direita, com outra ao fundo.
         const ax = retrato ? Math.round((W - arvore.width) / 2) : W - arvore.width - 18;
         const ay = retrato ? Math.round(H * 0.08) : chao - arvore.height + 2;
-        if (!retrato) f.drawImage(fundoArvore, Math.round(W * 0.42), chao - fundoArvore.height + 6);
         f.drawImage(arvore, ax, ay);
         // Montinho de pétalas ao pé da árvore.
         const base = retrato ? ay + arvore.height : chao;
