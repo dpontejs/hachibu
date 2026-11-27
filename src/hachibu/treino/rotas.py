@@ -1,15 +1,17 @@
-"""Rotas do treino: plano base, semana com os exercícios e a corrida da semana atual, catálogo."""
+"""Rotas do treino: a semana com os exercícios e a corrida da semana atual, e o catálogo.
 
-from fastapi import APIRouter, HTTPException
+Não há rota que gere o plano: ele nasce da conversa com o coach (rascunho em código + proposta aprovada).
+"""
+
+from fastapi import APIRouter, HTTPException, Response
 
 from hachibu.auth import UserId
 from hachibu.db import Db
 from hachibu.memorias import listar as listar_memorias
 from hachibu.perfil import ler_perfil
-from hachibu.treino.base import gerar_plano_base
 from hachibu.treino.exercicios import buscar, por_id
 from hachibu.treino.modelos import PlanoIn
-from hachibu.treino.repositorio import PlanoExistente, gravar_plano, plano_ativo, semana_corrida
+from hachibu.treino.repositorio import desativar_plano, plano_ativo, semana_corrida
 from hachibu.treino.validador import corrida_efetiva, validar_plano
 
 router = APIRouter(prefix="/api")
@@ -62,25 +64,16 @@ def obter_plano(user_id: UserId, db: Db) -> dict:
         "dias": montar_semana(plano, semana),
         # O perfil pode ter mudado depois do plano: o aluno vê o que deixou de valer.
         "avisos": validar_plano(plano, perfil, semana_corrida=semana),
-        # O que o gerador não pôde seguir das preferências (ex.: corridas a menos para sobrar musculação).
-        "notas": meta["notas"],
         "tem_condicoes": condicoes or bool(perfil.condicoes_saude and perfil.condicoes_saude.strip()),
     }
 
 
-@router.post("/plano/base", status_code=201)
-def gerar_plano_base_rota(user_id: UserId, db: Db, substituir: bool = False) -> dict:
-    perfil = _perfil(db, user_id)
-    plano, notas = gerar_plano_base(perfil)
-    # O gerador deveria sempre produzir um plano válido; se não, melhor recusar do que gravar um inválido.
-    erros = [e for semana in (1, 9) for e in validar_plano(plano, perfil, semana_corrida=semana)]
-    if erros:
-        raise HTTPException(422, sorted(set(erros)))
-    try:
-        gravar_plano(db, user_id, plano, "base", notas, substituir=substituir)
-    except PlanoExistente:
-        raise HTTPException(409, "plano_existente") from None
-    return {"notas": notas}
+@router.delete("/plano", status_code=204)
+def apagar_plano(user_id: UserId, db: Db) -> Response:
+    """Recomeçar: o plano ativo sai (a versão fica no histórico) e o próximo nasce de nova conversa."""
+    if not desativar_plano(db, user_id):
+        raise HTTPException(404, "plano_inexistente")
+    return Response(status_code=204)
 
 
 @router.get("/exercicios")

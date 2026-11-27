@@ -71,7 +71,7 @@ def test_plano_base_iniciante_3_dias():
 
 
 def test_plano_base_cardio_todo_treino():
-    p = perfil(dias_semana=4, corrida_quando="mesmo_dia", corridas_semana=4)
+    p = perfil(dias_semana=4, corrida_quando="mesmo_dia", corridas_semana=4, nivel_corrida="intermediario")
     plano = plano_base(p)
     assert all(d.corrida for d in plano.dias if d.exercicios)
     assert len(dias_com(plano, lambda d: d.corrida)) == 4
@@ -112,19 +112,22 @@ def test_corredor_intermediario_tem_leves_e_longao():
 
 
 @pytest.mark.parametrize(
-    "dias,equipamento,nivel,quando,minutos,nivel_corrida",
+    "dias,equipamento,nivel,quando,minutos,nivel_corrida,minutos_corrida",
     list(
         itertools.product(
             range(1, 8),
             ["academia", "casa_halteres", "peso_corporal"],
             ["iniciante", "intermediario", "avancado"],
             ["automatico", "mesmo_dia", "dias_separados"],
-            [15, 20, 30, 45, 60, 90],
+            [15, 30, 60, 90],
             [None, "intermediario", "avancado"],
+            [None, 20, 45],
         )
     ),
 )
-def test_todo_perfil_razoavel_gera_plano_valido(dias, equipamento, nivel, quando, minutos, nivel_corrida):
+def test_todo_perfil_razoavel_gera_plano_valido(
+    dias, equipamento, nivel, quando, minutos, nivel_corrida, minutos_corrida
+):
     p = perfil(
         dias_semana=dias,
         equipamento=equipamento,
@@ -132,6 +135,7 @@ def test_todo_perfil_razoavel_gera_plano_valido(dias, equipamento, nivel, quando
         corrida_quando=quando,
         minutos_sessao=minutos,
         nivel_corrida=nivel_corrida,
+        minutos_corrida=minutos_corrida,
     )
     plano, _ = gerar_plano_base(p)
     for semana in (1, 9):
@@ -139,6 +143,11 @@ def test_todo_perfil_razoavel_gera_plano_valido(dias, equipamento, nivel, quando
     for dia in plano.dias:
         ids = [e.exercicio_id for e in dia.exercicios]
         assert len(ids) == len(set(ids)), dia.nome
+
+
+def corredor(**mudancas) -> PerfilIn:
+    """Perfil de quem já corre: as corridas fixas dos testes do validador não precisam da progressão."""
+    return perfil(**{"nivel_corrida": "intermediario", **mudancas})
 
 
 # ---------- validador ----------
@@ -167,27 +176,27 @@ def corrida(dia: int, tipo="leve", minutos=30) -> DiaPlano:
 
 
 def test_validador_intervalado_depois_de_perna():
-    erros = validar_plano(plano_de(perna(0), corrida(1, "intervalado")), perfil())
+    erros = validar_plano(plano_de(perna(0), corrida(1, "intervalado")), corredor())
     assert any("perna" in e for e in erros)
-    assert validar_plano(plano_de(perna(0), corrida(1, "leve")), perfil()) == []
+    assert validar_plano(plano_de(perna(0), corrida(1, "leve")), corredor()) == []
 
 
 def test_validador_volume_de_corrida_sobe_no_maximo_10_por_cento():
     anterior = plano_de(corrida(1, minutos=30), corrida(3, minutos=30), corrida(5, minutos=40))
     mais_15 = plano_de(corrida(1, minutos=35), corrida(3, minutos=35), corrida(5, minutos=45))
-    assert any("10%" in e for e in validar_plano(mais_15, perfil(), anterior=anterior))
+    assert any("10%" in e for e in validar_plano(mais_15, corredor(), anterior=anterior))
     mais_10 = plano_de(corrida(1, minutos=33), corrida(3, minutos=33), corrida(5, minutos=44))
-    assert validar_plano(mais_10, perfil(), anterior=anterior) == []
+    assert validar_plano(mais_10, corredor(), anterior=anterior) == []
 
 
 def test_validador_exige_descanso():
     plano = PlanoIn(dias=[corrida(i) for i in range(7)])
-    assert any("descanso" in e for e in validar_plano(plano, perfil(dias_semana=7)))
+    assert any("sem treino pesado" in e for e in validar_plano(plano, corredor(dias_semana=7)))
 
 
 def test_validador_dias_acima_do_disponivel():
     plano = plano_de(corrida(0), corrida(2), corrida(4), corrida(6))
-    assert any("dias" in e for e in validar_plano(plano, perfil(dias_semana=3)))
+    assert any("dias" in e for e in validar_plano(plano, corredor(dias_semana=3)))
 
 
 def test_validador_duracao_estourada():
@@ -199,7 +208,12 @@ def test_validador_duracao_estourada():
         ]
         * 3,
     )
-    assert any("min" in e for e in validar_plano(plano_de(longo), perfil(minutos_sessao=45)))
+    assert any("min" in e for e in validar_plano(plano_de(longo), corredor(minutos_sessao=45)))
+    # A corrida do mesmo dia não entra na conta da musculação.
+    com_corrida = longo.model_copy(
+        update={"exercicios": longo.exercicios[:1], "corrida": corrida(0, minutos=60).corrida}
+    )
+    assert validar_plano(plano_de(com_corrida), corredor(minutos_sessao=45)) == []
 
 
 def test_validador_exercicio_inexistente_ou_sem_equipamento():
@@ -208,20 +222,20 @@ def test_validador_exercicio_inexistente_ou_sem_equipamento():
         nome="X",
         exercicios=[ExercicioPlano(exercicio_id="voo_do_dragao", series=3, reps_min=8, reps_max=10)],
     )
-    assert any("voo_do_dragao" in e for e in validar_plano(plano_de(inventado), perfil()))
+    assert any("voo_do_dragao" in e for e in validar_plano(plano_de(inventado), corredor()))
     maquina = DiaPlano(
         dia=0,
         nome="X",
         exercicios=[ExercicioPlano(exercicio_id="leg_press", series=3, reps_min=8, reps_max=10)],
     )
     assert any(
-        "equipamento" in e for e in validar_plano(plano_de(maquina), perfil(equipamento="peso_corporal"))
+        "equipamento" in e for e in validar_plano(plano_de(maquina), corredor(equipamento="peso_corporal"))
     )
 
 
 def test_validador_longao_grande_demais():
     plano = plano_de(corrida(1, minutos=20), corrida(3, minutos=20), corrida(5, "longao", 60))
-    assert any("longão" in e for e in validar_plano(plano, perfil()))
+    assert any("longão" in e for e in validar_plano(plano, corredor()))
 
 
 def test_plano_precisa_de_7_dias_distintos():
@@ -237,15 +251,49 @@ def test_progressao_sem_saltos_grandes():
     assert all(b <= a * 1.5 for a, b in zip(corridos, corridos[1:], strict=False)), corridos
 
 
-def test_pouco_tempo_tira_a_corrida_e_avisa():
-    p = perfil(dias_semana=1, minutos_sessao=30)
-    plano, avisos = gerar_plano_base(p)
+def test_pouco_tempo_de_corrida_tira_a_corrida_e_vira_ponto_para_conversar():
+    p = perfil(minutos_corrida=20)  # a de iniciante precisa de uns 33 min
+    plano, pontos = gerar_plano_base(p)
     assert validar_plano(plano, p) == [] and validar_plano(plano, p, semana_corrida=9) == []
-    assert any("corrida" in a for a in avisos)
+    assert not any(d.corrida for d in plano.dias)
+    assert any("corrida" in a for a in pontos)
 
 
-def test_dia_so_de_corrida_respeita_os_minutos():
-    assert any("min" in e for e in validar_plano(plano_de(corrida(1, minutos=60)), perfil(minutos_sessao=30)))
+def test_dia_so_de_corrida_respeita_os_minutos_de_corrida():
+    erros = validar_plano(plano_de(corrida(1, minutos=60)), corredor(minutos_corrida=30))
+    assert any("min" in e for e in erros)
+    assert validar_plano(plano_de(corrida(1, minutos=60)), corredor(minutos_sessao=30)) == []
+
+
+def test_corrida_nao_desconta_o_tempo_da_musculacao():
+    sem = plano_base(perfil(dias_semana=4, corridas_semana=1))
+    com = plano_base(perfil(dias_semana=4, corrida_quando="mesmo_dia", corridas_semana=4))
+    assert [len(d.exercicios) for d in sem.dias] == [len(d.exercicios) for d in com.dias]
+
+
+def test_sete_dias_e_seis_corridas_depois_da_musculacao():
+    p = perfil(dias_semana=7, corridas_semana=6, corrida_quando="mesmo_dia", nivel_corrida="intermediario")
+    plano, pontos = gerar_plano_base(p)
+    musc = [d for d in plano.dias if d.exercicios]
+    assert len(musc) == 6 and all(d.corrida for d in musc)
+    recuperacao = [d for d in plano.dias if d.corrida and d.corrida.tipo == "recuperacao"]
+    assert len(recuperacao) == 1 and not recuperacao[0].exercicios
+    assert any("recuperação" in a for a in pontos)
+    assert validar_plano(plano, p) == []
+
+
+def test_validador_exige_um_dia_sem_treino_pesado():
+    sete = PlanoIn(dias=[perna(i) for i in range(7)])
+    assert any("sem treino pesado" in e for e in validar_plano(sete, corredor(dias_semana=7)))
+    com_recuperacao = plano_de(
+        *[corrida(i, minutos=30) for i in range(6)],
+        DiaPlano(
+            dia=6,
+            nome="Recuperação",
+            corrida=CorridaPlano(tipo="recuperacao", duracao_min=30, esforco_alvo="1-3"),
+        ),
+    )
+    assert validar_plano(com_recuperacao, corredor(dias_semana=7)) == []
 
 
 def test_corridas_nao_comem_a_musculacao():
@@ -258,14 +306,14 @@ def test_corridas_nao_comem_a_musculacao():
         assert any("corridas" in a for a in avisos)
 
 
-def test_preferencia_trocada_vira_aviso():
-    _, avisos = gerar_plano_base(perfil(dias_semana=4, minutos_sessao=30, corrida_quando="mesmo_dia"))
-    assert any("dias separados" in a for a in avisos)
+def test_mesmo_dia_com_pouco_tempo_continua_no_mesmo_dia():
+    plano = plano_base(perfil(dias_semana=4, minutos_sessao=30, corrida_quando="mesmo_dia"))
+    assert all(d.exercicios for d in plano.dias if d.corrida)
 
 
 def test_treinos_duros_de_corrida_nao_ficam_em_dias_seguidos():
     plano = plano_de(corrida(3, "intervalado", 30), corrida(4, "longao", 30), corrida(0, minutos=30))
-    assert any("seguidos" in e for e in validar_plano(plano, perfil()))
+    assert any("seguidos" in e for e in validar_plano(plano, corredor()))
 
 
 def test_iniciante_em_casa_sem_exercicios_dificeis_demais():
@@ -288,4 +336,11 @@ def test_validador_exercicio_repetido_no_mesmo_dia():
         nome="X",
         exercicios=[ExercicioPlano(exercicio_id="supino_reto", series=3, reps_min=8, reps_max=10)] * 2,
     )
-    assert any("repetido" in e for e in validar_plano(plano_de(dia), perfil()))
+    assert any("repetido" in e for e in validar_plano(plano_de(dia), corredor()))
+
+
+def test_iniciante_com_6_corridas_fica_com_3_da_progressao_e_vira_pergunta():
+    p = perfil(dias_semana=7, corridas_semana=6, corrida_quando="mesmo_dia")
+    plano, pontos = gerar_plano_base(p)
+    assert len([d for d in plano.dias if d.corrida and d.corrida.progressao]) == 3
+    assert any("3 corridas" in a for a in pontos)

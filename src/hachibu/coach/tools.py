@@ -17,6 +17,7 @@ from hachibu.coach import ferramentas as f
 from hachibu.coach.foto import analisar_foto, casar_com_taco
 from hachibu.coach.skills import criar_tool_carregar_skill
 from hachibu.db import connect
+from hachibu.treino.modelos import PlanoIn
 
 log = logging.getLogger("hachibu.coach")
 
@@ -121,9 +122,7 @@ def criar_tools(
         if not decisao.get("aprovar"):
             motivo = decisao.get("motivo") or "sem motivo informado"
             return f"recusado pelo aluno, nada mudou. Motivo: {motivo}"
-        return "aprovado e aplicado: " + rodar(
-            f.aplicar_ajuste_metas, kcal, agora(), proteina_g, carbo_g, gordura_g
-        )
+        return aplicado(f.aplicar_ajuste_metas, kcal, agora(), proteina_g, carbo_g, gordura_g)
 
     @tool
     def lembrar(tipo: Literal["restricao", "condicao", "gosto"], texto: str) -> str:
@@ -138,6 +137,70 @@ def criar_tools(
         """Apaga um gosto que o aluno disse ter mudado (use o #id do bloco do aluno). Restrições e
         condições não podem ser apagadas pelo coach: só o aluno remove, na tela Perfil."""
         return rodar(f.esquecer_gosto, id)
+
+    @tool
+    def rascunho_plano() -> str:
+        """Rascunho do plano de treino e corrida feito em código a partir do perfil (ponto de partida seguro).
+        Devolve o plano (ids do catálogo), a legenda id → nome e os PONTOS em que o rascunho não seguiu a
+        preferência do aluno: converse sobre eles antes de propor. Não grava nada."""
+        return rodar(f.rascunho_plano)
+
+    @tool
+    def ler_plano() -> str:
+        """Plano de treino atual do aluno (versão, dias, legenda, semana da corrida iniciante e avisos)."""
+        return rodar(f.ler_plano)
+
+    @tool
+    def buscar_exercicio(termo: str) -> str:
+        """Busca exercícios do catálogo pelo nome (ex.: "agachamento"), filtrados pelo equipamento do
+        aluno. Use o id devolvido no plano."""
+        return rodar(f.buscar_exercicio, termo)
+
+    def aplicado(funcao, *args) -> str:
+        """Depois da aprovação: diz claramente se gravou ou não (o modelo não afirma o que não houve)."""
+        db = connect(db_path)
+        try:
+            return "aprovado e gravado: " + _json(funcao(db, user_id, *args))
+        except f.ErroFerramenta as e:
+            return f"aprovado, mas nada foi gravado: {e}"
+        except Exception:
+            log.exception("aplicação falhou depois da aprovação")
+            return "aprovado, mas nada foi gravado: falha interna. Peça para o aluno tentar de novo."
+        finally:
+            db.close()
+
+    @tool
+    def propor_plano(plano: PlanoIn, justificativa: str, versao_base: int | None = None) -> str:
+        """Propõe a semana INTEIRA de treino (7 dias, 0 = segunda) para o aluno aprovar. Mantenha igual o que
+        ele não pediu para mudar. versao_base: a versão do plano de que você partiu (versao em ler_plano ou
+        versao_atual em rascunho_plano; vazio se ele ainda não tem plano). O sistema valida as regras e mostra
+        ao aluno só o que muda. Só grava depois da aprovação."""
+        db = connect(db_path)
+        try:
+            # Valida antes de pedir aprovação: proposta inválida nunca chega ao aluno. (Na retomada esta
+            # validação roda de novo: se o perfil ou o plano mudou, nada é gravado e o modelo sabe por quê.)
+            mudancas = f.validar_proposta(db, user_id, plano, versao_base)
+        except f.ErroFerramenta as e:
+            return (
+                f"erro: {e} (se o aluno já tinha aprovado esta proposta, nada foi gravado: "
+                "explique e proponha de novo)"
+            )
+        except Exception:
+            log.exception("validação da proposta falhou")
+            return "erro: não consegui validar a proposta agora. Tente de novo."
+        finally:
+            db.close()
+        decisao = interrupt(
+            {
+                "ferramenta": "propor_plano",
+                "args": {"justificativa": justificativa, "mudancas": mudancas},
+                "descricao": f"Plano de treino: {len(mudancas)} mudança(s). Motivo: {justificativa}",
+            }
+        )
+        if not decisao.get("aprovar"):
+            motivo = decisao.get("motivo") or "sem motivo informado"
+            return f"recusado pelo aluno, nada mudou. Motivo: {motivo}"
+        return aplicado(f.aplicar_plano, plano, versao_base)
 
     @tool
     def analisar_foto_refeicao() -> str:
@@ -167,5 +230,9 @@ def criar_tools(
         analisar_foto_refeicao,
         lembrar,
         esquecer_gosto,
+        rascunho_plano,
+        ler_plano,
+        buscar_exercicio,
+        propor_plano,
         criar_tool_carregar_skill(),
     ]

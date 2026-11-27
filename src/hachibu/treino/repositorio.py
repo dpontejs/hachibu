@@ -76,3 +76,8 @@ def gravar_plano(
 def semana_corrida(db, user_id: int) -> int:
     row = db.execute("SELECT semana FROM progressao_corrida WHERE user_id = ?", (user_id,)).fetchone()
     return row["semana"] if row else 1
+
+
+def desativar_plano(db, user_id: int) -> bool:
+    """Tira o plano ativo (a versão fica no histórico). Devolve False se não havia plano ativo."""
+    return db.execute("UPDATE planos SET ativo = 0 WHERE user_id = ? AND ativo = 1", (user_id,)).rowcount > 0

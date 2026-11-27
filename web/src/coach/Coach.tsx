@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { api, ApiError, ConexaoPerdida, mensagemDeErro, Redirecionado, type ConversaCoach, type MensagemCoach, type PendenciaCoach, type RespostaCoach } from "../api";
 import { Icone } from "../ui";
-import { EVENTO_FOTO, gravarThread, lerThread } from "./abrir";
+import { EVENTO_FOTO, EVENTO_MENSAGEM, EVENTO_PLANO, gravarThread, lerThread } from "./abrir";
 import Aprovacao from "./Aprovacao";
 
 export { CHAVE_THREAD } from "./abrir";
@@ -26,6 +26,10 @@ const FRASES: Record<string, string> = {
   "skill:nutricao": "Consultando o guia de nutrição…",
   "skill:musculacao": "Consultando o guia de musculação…",
   "skill:corrida": "Consultando o guia de corrida…",
+  rascunho_plano: "Montando um rascunho do seu plano…",
+  ler_plano: "Lendo seu plano de treino…",
+  buscar_exercicio: "Procurando exercícios…",
+  propor_plano: "Preparando a proposta do plano…",
 };
 
 export function frasePasso(ferramenta: string | null): string {
@@ -213,15 +217,23 @@ const FORA_MS = 20_000; // voltou do segundo plano e o stream está mudo há mai
  * O coach: o mesmo componente no painel do desktop e em /coach no celular.
  * A conversa vive no servidor; aqui só fica o `thread_id` (localStorage).
  */
-export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }) {
-  const [threadId, setThreadId] = useState<string | null>(lerThread);
+export default function Coach({
+  abrirCamera = false,
+  mensagemInicial,
+}: {
+  abrirCamera?: boolean;
+  /** Pedido de outra tela (ex.: "montar meu plano"): fica escrito na caixa, sem enviar. */
+  mensagemInicial?: string;
+}) {
+  // Com um pedido vindo de outra tela, começa uma conversa nova (a anterior continua na lista).
+  const [threadId, setThreadId] = useState<string | null>(() => (mensagemInicial ? null : lerThread()));
   const [mensagens, setMensagens] = useState<MensagemCoach[]>([]);
   const [pendente, setPendente] = useState<PendenciaCoach | null>(null);
-  const [carregando, setCarregando] = useState(() => lerThread() !== null);
+  const [carregando, setCarregando] = useState(() => !mensagemInicial && lerThread() !== null);
   const [envio, setEnvio] = useState<Envio | null>(null);
   const [decidindo, setDecidindo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [texto, setTexto] = useState("");
+  const [texto, setTexto] = useState(mensagemInicial ?? "");
   const [foto, setFoto] = useState<File | null>(null);
   const [previa, setPrevia] = useState<string | null>(null);
   const [previaQuebrada, setPreviaQuebrada] = useState(false);
@@ -243,6 +255,8 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
   const geracao = useRef(0);
 
   const lista = useRef<HTMLDivElement>(null);
+  /** Estado atual para os ouvintes de evento registrados uma vez só. */
+  const estado = useRef({ texto: "", temConversa: false, ocupado: false, novaConversa: () => {} });
   const seletor = useRef<HTMLInputElement>(null);
   const campo = useRef<HTMLTextAreaElement>(null);
   const previaAtual = useRef<string | null>(null);
@@ -378,6 +392,10 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
   }, []);
 
   useEffect(() => {
+    if (mensagemInicial) {
+      gravarThread(null);
+      return;
+    }
     const id = lerThread();
     if (!id) return;
     let vivo = true;
@@ -386,6 +404,7 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
     return () => {
       vivo = false;
     };
+    // Só na montagem: o pedido inicial não muda depois.
   }, [recarregar]);
 
   // Câmera pedida pela tela de comida: no celular ao montar, no desktop por evento.
@@ -401,9 +420,24 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
       window.clearTimeout(t);
       t = window.setTimeout(() => setChamado(false), 900);
     }
+    function escrever(ev: Event) {
+      const pedido = (ev as CustomEvent<string>).detail;
+      if (typeof pedido !== "string") return;
+      campo.current?.focus();
+      // Não apaga o que o aluno já estava escrevendo.
+      if (estado.current.texto.trim()) return;
+      // Outro assunto numa conversa aberta (ou com aprovação pendente): começa uma nova.
+      if (estado.current.temConversa && !estado.current.ocupado) estado.current.novaConversa();
+      setTexto(pedido);
+      setChamado(true);
+      window.clearTimeout(t);
+      t = window.setTimeout(() => setChamado(false), 900);
+    }
     window.addEventListener(EVENTO_FOTO, abrir);
+    window.addEventListener(EVENTO_MENSAGEM, escrever);
     return () => {
       window.removeEventListener(EVENTO_FOTO, abrir);
+      window.removeEventListener(EVENTO_MENSAGEM, escrever);
       window.clearTimeout(t);
     };
   }, []);
@@ -530,7 +564,9 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
     setDecidindo(true);
     setErro(null);
     try {
+      const eraPlano = pendente?.ferramenta === "propor_plano";
       aplicar(await api.coachDecidir(threadId, aprovar, motivo));
+      if (eraPlano && aprovar) window.dispatchEvent(new Event(EVENTO_PLANO));
     } catch (e) {
       setErro(mensagemDeErro(e));
       // 409: a pendência já foi resolvida (outra aba?); traz o estado real.
@@ -603,6 +639,13 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
       await recarregar(threadId, () => geracao.current === nova);
     } else setCarregando(false);
   }
+
+  estado.current = {
+    texto,
+    temConversa: mensagens.length > 0 || pendente !== null || threadId !== null,
+    ocupado,
+    novaConversa,
+  };
 
   function aoEnviar(ev: FormEvent) {
     ev.preventDefault();

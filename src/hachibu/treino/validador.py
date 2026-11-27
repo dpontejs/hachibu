@@ -44,7 +44,21 @@ def perna_pesada(dia: DiaPlano) -> bool:
 
 
 def volume_corrida(plano: PlanoIn, semana_corrida: int) -> int:
-    return sum(c.duracao_min for d in plano.dias if (c := corrida_efetiva(d.corrida, semana_corrida)))
+    """Minutos de corrida na semana (a recuperação é caminhada e não entra)."""
+    return sum(
+        c.duracao_min
+        for d in plano.dias
+        if (c := corrida_efetiva(d.corrida, semana_corrida)) and c.tipo != "recuperacao"
+    )
+
+
+def sem_treino_pesado(dia: DiaPlano) -> bool:
+    return not dia.exercicios and (dia.corrida is None or dia.corrida.tipo == "recuperacao")
+
+
+MAX_RECUPERACAO_MIN = 40
+# Sem minutos_corrida no perfil, o teto de uma sessão de corrida vem do nível.
+TETO_CORRIDA_NIVEL = {"intermediario": 60, "avancado": 120}
 
 
 def validar_plano(
@@ -62,24 +76,54 @@ def validar_plano(
                     f"{DIAS[dia.dia]}: {ex.nome} precisa de outro equipamento "
                     f"(o aluno tem {perfil.equipamento})."
                 )
-    # 2. descanso e dias disponíveis
-    treino = [d for d in plano.dias if d.exercicios or d.corrida]
-    if len(treino) == 7:
-        erros.append("o plano precisa de pelo menos 1 dia de descanso total.")
+    # 2. um dia sem treino pesado (descanso ou recuperação) e os dias disponíveis
+    # A recuperação (caminhada leve) não conta como dia de treino.
+    treino = [d for d in plano.dias if not sem_treino_pesado(d)]
+    if not any(sem_treino_pesado(d) for d in plano.dias):
+        erros.append("o plano precisa de pelo menos 1 dia sem treino pesado (descanso ou recuperação).")
     if len(treino) > perfil.dias_semana:
         erros.append(
             f"o plano usa {len(treino)} dias, mas o aluno tem {perfil.dias_semana} dias disponíveis."
         )
-    # 3. duração de cada dia (musculação + corrida do mesmo dia, ou só a corrida)
-    limite = perfil.minutos_sessao * TOLERANCIA_DURACAO
+    # 3. duração: musculação contra minutos_sessao; corrida contra minutos_corrida (quando informado)
     for dia in plano.dias:
-        corrida = corrida_efetiva(dia.corrida, semana_corrida)
-        total = minutos_musculacao(dia) + (corrida.duracao_min if corrida else 0)
-        if total > limite:
+        musc = minutos_musculacao(dia)
+        if dia.exercicios and musc > perfil.minutos_sessao * TOLERANCIA_DURACAO:
             erros.append(
-                f"{DIAS[dia.dia]}: cerca de {total:.0f} min, "
+                f"{DIAS[dia.dia]}: cerca de {musc:.0f} min de musculação, "
                 f"acima dos {perfil.minutos_sessao} min por sessão."
             )
+        corrida = corrida_efetiva(dia.corrida, semana_corrida)
+        if corrida and corrida.tipo == "recuperacao":
+            # Caminhada ou mobilidade: só o limite próprio, não o tempo de corrida.
+            if corrida.duracao_min > MAX_RECUPERACAO_MIN:
+                erros.append(f"{DIAS[dia.dia]}: recuperação de no máximo {MAX_RECUPERACAO_MIN} min.")
+        elif (
+            corrida
+            and perfil.minutos_corrida
+            and corrida.duracao_min > perfil.minutos_corrida * TOLERANCIA_DURACAO
+        ):
+            erros.append(
+                f"{DIAS[dia.dia]}: corrida de {corrida.duracao_min} min, "
+                f"acima dos {perfil.minutos_corrida} min de corrida por sessão."
+            )
+    # 3b. iniciante corre pela progressão; sem tempo de corrida no perfil, teto pelo nível
+    nivel_corrida = perfil.nivel_corrida or "iniciante"
+    for dia in plano.dias:
+        c = dia.corrida
+        if not c or c.tipo == "recuperacao":
+            continue
+        if nivel_corrida == "iniciante" and not c.progressao:
+            erros.append(
+                f"{DIAS[dia.dia]}: o aluno é iniciante na corrida; use a progressão (progressao: true). "
+                "Se ele já corre, ele muda o nível de corrida no Perfil."
+            )
+        elif not perfil.minutos_corrida and nivel_corrida in TETO_CORRIDA_NIVEL:
+            teto = TETO_CORRIDA_NIVEL[nivel_corrida]
+            if c.duracao_min > teto:
+                erros.append(
+                    f"{DIAS[dia.dia]}: corrida de {c.duracao_min} min, acima de {teto} min para o nível."
+                )
     # 4. nada de intervalado ou longão no dia seguinte a perna pesada
     for dia in plano.dias:
         corrida = corrida_efetiva(dia.corrida, semana_corrida)

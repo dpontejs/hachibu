@@ -8,7 +8,15 @@
 
 A aba TREINO passa a ter o plano da semana (musculação e corrida juntas) e o registro do que foi feito. O Hachibu monta um **plano base em código** a partir do perfil. Depois o aluno o ajusta conversando com o coach: troca exercícios, muda a divisão, sobe o nível. Toda mudança é validada em código e só vale depois de aprovada. O primeiro usuário é iniciante na corrida e está sem preparo, então a corrida começa alternando corrida e caminhada.
 
-**Princípio:** tudo é personalizável. O plano base nasce das preferências declaradas, e não de um único padrão. O que o formulário não cobre, o coach ajusta pela conversa. O diferencial do Hachibu é esse: um plano que é seu, mais um coach para ajudar a mudá-lo com segurança.
+**Princípio:** tudo é personalizável (ver o princípio em `hachibu.md`). **O plano nasce de uma conversa com o coach**, não de um botão: o plano base em código é o rascunho que o coach usa (`rascunho_plano()` devolve o plano e os pontos em aberto), discute com o aluno e só então propõe (`propor_plano()`, validado e aprovado no card). Os pontos em que o rascunho não seguiu uma preferência viram perguntas do coach, não notas silenciosas.
+
+**Mudança de 2026-11-28 (depois de testar o PR #14):** o plano era gerado direto por um botão, e isso foi trocado pela conversa. Também:
+- **Dois tempos separados:** `minutos_sessao` passa a ser só a musculação, e `minutos_corrida` (novo, opcional) é o tempo da corrida. Um não desconta do outro.
+- **Dia de recuperação:** um tipo de corrida `recuperacao` (caminhada leve ou mobilidade, esforço 1–3, até 40 min). A regra 2 passa a exigir pelo menos 1 dia **sem treino pesado** (descanso ou recuperação). Com 7 dias, o rascunho põe 1 de recuperação, e o coach pergunta se o aluno prefere descanso total.
+- **Até 6 dias de musculação** (superior/inferior repetido 3 vezes). Com "depois da musculação", a corrida vai em todos os dias de musculação pedidos.
+
+Ordem nova dos PRs: (1) plano base, validador e tela da semana **sem botão de gerar**; (2) plano pela conversa (`rascunho_plano`, `propor_plano` e o card com a semana); (3) registro estilo Hevy.
+
 
 ## Fora de escopo
 
@@ -46,14 +54,14 @@ A aba TREINO passa a ter o plano da semana (musculação e corrida juntas) e o r
   - A cada 3 corridas, se 2 ou mais tiverem esforço 9 ou 10, a semana se repete e a contagem recomeça. Senão, avança.
   - Depois da semana 9, a progressão termina: os dias viram "leve 30 min" fixos, e a tela sugere pedir ao coach o próximo passo.
   - Se o coach substituir uma corrida da progressão por uma corrida fixa, aquele dia sai da progressão (`progressao=false`).
-- **Perfil mudou e o plano ficou inválido** *(decisão do builder)*: a aba TREINO roda o validador contra o perfil atual e mostra o aviso "seu perfil mudou", com duas saídas: "gerar novo plano base" (`POST /plano/base?substituir=true`, que cria versão nova com origem base) ou pedir ao coach.
+- **Perfil mudou e o plano ficou inválido** *(decisão do builder)*: a aba TREINO roda o validador contra o perfil atual e mostra o aviso "o plano não cabe no seu perfil atual", com "AJUSTAR COM O COACH".
 - **O coach altera o plano propondo a semana inteira**: `propor_plano(plano: PlanoIn, justificativa)`. O código valida, calcula a diferença item a item para a versão atual e pausa com `interrupt()`. O card mostra só as mudanças. Ao aprovar, grava a versão nova com `origem="coach"`.
 
 ## Regras do validador (`validar_plano(plano, perfil, anterior) -> list[str]`)
 
 1. Todo exercício existe no catálogo ou nos exercícios próprios, e cabe no `equipamento` do perfil.
 2. Há pelo menos 1 dia de descanso total. O número de dias com treino é no máximo `dias_semana`.
-3. A duração estimada do dia, `Σ séries × (40 s + descanso)` mais a corrida (inclusive em dia só de corrida), é no máximo `minutos_sessao` × 1,15.
+3. A musculação do dia, `Σ séries × (40 s + descanso)`, é no máximo `minutos_sessao` × 1,15. A corrida tem o próprio limite: `minutos_corrida` × 1,15, ou, sem esse campo, 60 min para intermediário e 120 para avançado. O iniciante corre pela progressão. A recuperação vai até 40 min e não conta como dia de treino.
 4. Não há intervalado nem longão no dia seguinte a um dia com 6 ou mais séries de pernas.
 5. O volume de corrida da semana (minutos) é no máximo 1,10 × o da versão anterior. A primeira versão é livre.
 6. O longão tem no máximo 40% do volume semanal de corrida. Com 3 corridas de 30 min, um teto de 30% deixaria o longão menor que a leve, por isso vale 40%.
@@ -61,7 +69,7 @@ A aba TREINO passa a ter o plano da semana (musculação e corrida juntas) e o r
 8. Intervalado e longão nunca em dias seguidos.
 9. O mesmo exercício não aparece duas vezes no mesmo dia.
 
-O plano base nunca grava um plano que reprove nessas regras (`POST /plano/base` valida antes, nas semanas 1 e 9). O que ele não pôde seguir das preferências (corridas a menos para sobrar musculação, corrida em dias separados por falta de tempo, corrida fora por falta de tempo) vira **nota** gravada com a versão e mostrada na tela.
+O rascunho em código passa nessas regras em todas as combinações testadas. O que ele não pôde seguir das preferências vira **ponto** devolvido ao coach, que pergunta antes de propor. Toda proposta (`propor_plano`) é validada em todas as semanas da progressão e contra a versão de que partiu (`versao_base`): se o plano mudou no meio, nada é gravado. No primeiro plano, a regra 5 compara com o volume do rascunho.
 
 ## Contratos
 
@@ -81,7 +89,6 @@ class DiaPlano(BaseModel):
 class PlanoIn(BaseModel): dias: list[DiaPlano]          # 7 dias, extra=forbid
 
 GET  /api/plano                 → {versao, origem, criado_em, dias, semana_corrida}  | 404 sem plano
-POST /api/plano/base            → 201 (gera a partir do perfil; 409 se já existe plano, salvo ?substituir=true)
 GET  /api/exercicios?q=         → catálogo + próprios         POST /api/exercicios → 201 (próprio)
 POST /api/sessoes               → 201 {tipo: musculacao|corrida, data, plano_dia, local?}
 PUT  /api/sessoes/{id}          → séries [{exercicio_id, ordem, carga_kg?, reps}] | corrida {duracao_min, distancia_km?, esforco}
@@ -94,7 +101,8 @@ GET  /api/exercicios/{id}/ultima?local= → séries da última sessão (do mesmo
 - **Tools do coach:**
   - `ler_plano()`, `historico_exercicio(exercicio_id, local?)` e `historico_corrida()`;
   - `registrar_corrida(duracao_min, esforco, distancia_km?)`, que segue a mesma regra de avanço;
-  - `propor_plano(plano, justificativa)`, com `interrupt()`.
+  - `rascunho_plano()` (plano base + pontos + `versao_atual`), `buscar_exercicio(termo)`;
+  - `propor_plano(plano, justificativa, versao_base)`, com `interrupt()`. O card mostra só as diferenças, casadas por exercício.
 
 ## PRs
 

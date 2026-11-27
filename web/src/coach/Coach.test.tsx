@@ -2,7 +2,8 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import Coach, { CHAVE_THREAD, nomeFerramenta } from "./Coach";
+import Coach, { CHAVE_THREAD, frasePasso, nomeFerramenta } from "./Coach";
+import { EVENTO_MENSAGEM, EVENTO_PLANO } from "./abrir";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -651,4 +652,121 @@ describe("Coach", () => {
       expect(screen.getByRole("textbox", { name: /mensagem para o coach/i })).toHaveValue("oi");
     });
   });
+
+  it("abre com a mensagem pedida por outra tela já escrita na caixa (sem enviar)", async () => {
+    const chamadas = mockFetch(() => undefined);
+    render(
+      <MemoryRouter>
+        <Coach mensagemInicial="Quero montar meu plano de treino" />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("textbox", { name: /mensagem para o coach/i })).toHaveValue(
+      "Quero montar meu plano de treino",
+    );
+    expect(chamadas.some((c) => c.init?.method === "POST")).toBe(false);
+  });
+
+  it("no desktop, o pedido de outra tela chega por evento", async () => {
+    renderCoach();
+    window.dispatchEvent(new CustomEvent(EVENTO_MENSAGEM, { detail: "Ajusta meu plano" }));
+    expect(await screen.findByDisplayValue("Ajusta meu plano")).toBeInTheDocument();
+  });
+
+  it("proposta de plano mostra o motivo e só o que muda", async () => {
+    localStorage.setItem(CHAVE_THREAD, "t-p");
+    mockFetch((u) =>
+      u === "/api/coach/t-p"
+        ? json({
+            thread_id: "t-p",
+            mensagens: [{ papel: "usuario", texto: "troca o leg press", ferramentas: [] }],
+            pendente: {
+              ferramenta: "propor_plano",
+              args: {
+                justificativa: "Você não gosta de leg press.",
+                mudancas: ["sexta: Leg press → Agachamento goblet (3×8–12)"],
+              },
+              descricao: "Plano de treino: 1 mudança(s).",
+            },
+          })
+        : undefined,
+    );
+    renderCoach();
+    const card = await screen.findByRole("region", { name: /proposta de plano/i });
+    expect(within(card).getByText("Você não gosta de leg press.")).toBeInTheDocument();
+    const lista = within(card).getByRole("list", { name: /mudanças/i });
+    expect(within(lista).getByText("sexta: Leg press → Agachamento goblet (3×8–12)")).toBeInTheDocument();
+  });
+
+  it("frases dos passos do plano de treino", () => {
+    expect(frasePasso("rascunho_plano")).toMatch(/rascunho/i);
+    expect(frasePasso("propor_plano")).toMatch(/proposta/i);
+    expect(frasePasso("buscar_exercicio")).toMatch(/exerc/i);
+  });
+
+  it("pedido de outra tela não apaga o que o aluno já digitou", async () => {
+    mockFetch(() => undefined);
+    const user = userEvent.setup();
+    renderCoach();
+    const caixa = screen.getByRole("textbox", { name: /mensagem para o coach/i });
+    await user.type(caixa, "meu rascunho");
+    window.dispatchEvent(new CustomEvent(EVENTO_MENSAGEM, { detail: "Ajusta meu plano" }));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(caixa).toHaveValue("meu rascunho");
+  });
+
+  it("pedido de outra tela abre uma conversa nova se já havia uma", async () => {
+    localStorage.setItem(CHAVE_THREAD, "t-1");
+    mockFetch((u) =>
+      u === "/api/coach/t-1"
+        ? json({
+            thread_id: "t-1",
+            mensagens: [{ papel: "coach", texto: "Conversa sobre jantar.", ferramentas: [] }],
+            pendente: null,
+          })
+        : undefined,
+    );
+    renderCoach();
+    expect(await screen.findByText("Conversa sobre jantar.")).toBeInTheDocument();
+    window.dispatchEvent(new CustomEvent(EVENTO_MENSAGEM, { detail: "Quero montar meu plano" }));
+    expect(await screen.findByDisplayValue("Quero montar meu plano")).toBeInTheDocument();
+    expect(screen.queryByText("Conversa sobre jantar.")).not.toBeInTheDocument();
+    expect(localStorage.getItem(CHAVE_THREAD)).toBeNull();
+  });
+
+  it("no celular, abrir com pedido começa conversa nova sem carregar a antiga", async () => {
+    localStorage.setItem(CHAVE_THREAD, "t-1");
+    const chamadas = mockFetch(() => undefined);
+    render(
+      <MemoryRouter>
+        <Coach mensagemInicial="Quero montar meu plano" />
+      </MemoryRouter>,
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    expect(chamadas.some((c) => c.url === "/api/coach/t-1")).toBe(false);
+    expect(localStorage.getItem(CHAVE_THREAD)).toBeNull();
+  });
+
+  it("aprovar uma proposta de plano avisa as outras telas", async () => {
+    localStorage.setItem(CHAVE_THREAD, "t-p");
+    const pendente = {
+      ferramenta: "propor_plano",
+      args: { justificativa: "x", mudancas: ["segunda: A → B"] },
+      descricao: "Plano",
+    };
+    mockFetch((u, init) => {
+      if (u === "/api/coach/t-p") return json({ thread_id: "t-p", mensagens: [], pendente });
+      if (u === "/api/coach/t-p/decisao" && init?.method === "POST")
+        return json({ thread_id: "t-p", mensagens: [{ papel: "coach", texto: "Gravado.", ferramentas: [] }], pendente: null });
+    });
+    const avisado = vi.fn();
+    window.addEventListener(EVENTO_PLANO, avisado);
+    const user = userEvent.setup();
+    renderCoach();
+    const card = await screen.findByRole("region", { name: /proposta de plano/i });
+    await user.click(within(card).getByRole("button", { name: /^aprovar$/i }));
+    await screen.findByText("Gravado.");
+    expect(avisado).toHaveBeenCalledTimes(1);
+    window.removeEventListener(EVENTO_PLANO, avisado);
+  });
 });
+

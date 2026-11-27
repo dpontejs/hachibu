@@ -1,7 +1,8 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { EVENTO_PLANO } from "../coach/abrir";
 import Treino from "./Treino";
 
 function json(body: unknown, status = 200): Response {
@@ -18,7 +19,6 @@ const PLANO = {
   criado_em: "2026-11-28T10:00:00Z",
   semana_corrida: 1,
   avisos: [] as string[],
-  notas: [] as string[],
   tem_condicoes: false,
   dias: [
     {
@@ -54,10 +54,18 @@ function servidor(rotas: (u: string, init?: RequestInit) => Response | undefined
   return chamadas;
 }
 
+function Destino() {
+  const { search } = useLocation();
+  return <p data-testid="destino">{new URLSearchParams(search).get("msg")}</p>;
+}
+
 function renderTreino() {
   return render(
-    <MemoryRouter>
-      <Treino />
+    <MemoryRouter initialEntries={["/treino"]}>
+      <Routes>
+        <Route path="/treino" element={<Treino />} />
+        <Route path="/coach" element={<Destino />} />
+      </Routes>
     </MemoryRouter>,
   );
 }
@@ -68,20 +76,13 @@ afterEach(() => {
 });
 
 describe("Treino", () => {
-  it("sem plano, oferece montar e mostra a semana depois", async () => {
-    let temPlano = false;
-    const chamadas = servidor((u, init) => {
-      if (u === "/api/plano" && init?.method !== "POST") return temPlano ? json(PLANO) : json({ detail: "plano_inexistente" }, 404);
-      if (u === "/api/plano/base" && init?.method === "POST") {
-        temPlano = true;
-        return json(null, 201);
-      }
-    });
+  it("sem plano, monta com o coach (nunca gera direto)", async () => {
+    const chamadas = servidor((u) => (u === "/api/plano" ? json({ detail: "plano_inexistente" }, 404) : undefined));
     const user = userEvent.setup();
     renderTreino();
-    await user.click(await screen.findByRole("button", { name: /montar meu plano/i }));
-    expect(await screen.findAllByText("Corpo inteiro A")).not.toHaveLength(0);
-    expect(chamadas.some((c) => c.url === "/api/plano/base" && c.init?.method === "POST")).toBe(true);
+    await user.click(await screen.findByRole("button", { name: /montar com o coach/i }));
+    expect(screen.getByTestId("destino")).toHaveTextContent(/montar meu plano de treino/i);
+    expect(chamadas.some((c) => c.init?.method === "POST")).toBe(false);
   });
 
   it("destaca o treino de hoje com os exercícios e a corrida da semana", async () => {
@@ -110,32 +111,28 @@ describe("Treino", () => {
     expect(await screen.findByText(/condições físicas registradas/i)).toBeInTheDocument();
   });
 
-  it("perfil mudou: gerar novo plano base pede confirmação", async () => {
-    const chamadas = servidor((u, init) => {
-      if (u === "/api/plano" && init?.method !== "POST") return json({ ...PLANO, avisos: ["segunda: Supino precisa de outro equipamento"] });
-      if (u.startsWith("/api/plano/base")) return json(null, 201);
-    });
-    const confirmar = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+  it("perfil mudou: oferece ajustar com o coach", async () => {
+    servidor((u) =>
+      u === "/api/plano" ? json({ ...PLANO, avisos: ["segunda: Supino precisa de outro equipamento"] }) : undefined,
+    );
     const user = userEvent.setup();
     renderTreino();
     expect(await screen.findByText(/precisa de outro equipamento/)).toBeInTheDocument();
     expect(screen.getByText(/o plano não cabe no seu perfil atual/i)).toBeInTheDocument();
-    const botao = screen.getByRole("button", { name: /gerar novo plano base/i });
-    await user.click(botao);
-    expect(chamadas.some((c) => c.url.startsWith("/api/plano/base"))).toBe(false);
-    await user.click(botao);
-    await waitFor(() =>
-      expect(chamadas.some((c) => c.url === "/api/plano/base?substituir=true" && c.init?.method === "POST")).toBe(true),
-    );
-    expect(confirmar).toHaveBeenCalledTimes(2);
+    await user.click(screen.getByRole("button", { name: /ajustar com o coach/i }));
+    expect(screen.getByTestId("destino")).toHaveTextContent(/não cabe mais no meu perfil/i);
   });
 
-  it("mostra as notas do que o plano base não pôde seguir", async () => {
-    servidor((u) =>
-      u === "/api/plano" ? json({ ...PLANO, notas: ["Você pediu 3 corridas por semana; ficaram 2."] }) : undefined,
-    );
+  it("recarrega quando um plano é aprovado no coach", async () => {
+    let versao = 1;
+    servidor((u) => (u === "/api/plano" ? json({ ...PLANO, versao, dias: PLANO.dias }) : undefined));
     renderTreino();
-    expect(await screen.findByText(/ficaram 2/)).toBeInTheDocument();
+    await screen.findByRole("region", { name: /hoje/i });
+    versao = 2;
+    const antes = (globalThis.fetch as unknown as { mock: { calls: unknown[] } }).mock.calls.length;
+    window.dispatchEvent(new Event(EVENTO_PLANO));
+    await new Promise((r) => setTimeout(r, 10));
+    expect((globalThis.fetch as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBeGreaterThan(antes);
   });
 
   it("se carregar falhar, oferece tentar de novo", async () => {
@@ -162,15 +159,23 @@ describe("Treino", () => {
     expect(await screen.findByText(/HOJE · TER/)).toBeInTheDocument();
   });
 
-  it("plano já existente (outra aba) vira mensagem em português", async () => {
-    servidor((u, init) => {
-      if (u === "/api/plano" && init?.method !== "POST") return json({ detail: "plano_inexistente" }, 404);
-      if (u === "/api/plano/base") return json({ detail: "plano_existente" }, 409);
+  it("recomeçar pede confirmação, apaga o plano e volta para montar com o coach", async () => {
+    let temPlano = true;
+    const chamadas = servidor((u, init) => {
+      if (u === "/api/plano" && init?.method === "DELETE") {
+        temPlano = false;
+        return new Response(null, { status: 204 });
+      }
+      if (u === "/api/plano") return temPlano ? json(PLANO) : json({ detail: "plano_inexistente" }, 404);
     });
+    vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
     const user = userEvent.setup();
     renderTreino();
-    await user.click(await screen.findByRole("button", { name: /montar meu plano/i }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/já tem um plano/i);
+    const botao = await screen.findByRole("button", { name: /recomeçar plano/i });
+    await user.click(botao);
+    expect(chamadas.some((c) => c.init?.method === "DELETE")).toBe(false);
+    await user.click(botao);
+    expect(await screen.findByRole("button", { name: /montar com o coach/i })).toBeInTheDocument();
   });
 });
 

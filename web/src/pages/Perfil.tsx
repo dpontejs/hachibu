@@ -37,6 +37,7 @@ interface Form {
   nivel_corrida: Nivel | "";
   corrida_quando: CorridaQuando | "";
   corridas_semana: string;
+  minutos_corrida: string;
 }
 
 const VAZIO: Form = {
@@ -59,6 +60,7 @@ const VAZIO: Form = {
   nivel_corrida: "",
   corrida_quando: "",
   corridas_semana: "",
+  minutos_corrida: "",
 };
 
 function deApi(p: DadosPerfil): Form {
@@ -83,6 +85,7 @@ function deApi(p: DadosPerfil): Form {
     nivel_corrida: p.nivel_corrida ?? "",
     corrida_quando: p.corrida_quando ?? "",
     corridas_semana: s(p.corridas_semana),
+    minutos_corrida: s(p.minutos_corrida),
   };
 }
 
@@ -109,6 +112,7 @@ function paraApi(f: Form): DadosPerfil {
     nivel_corrida: f.nivel_corrida || null,
     corrida_quando: f.corrida_quando || null,
     corridas_semana: opcional(f.corridas_semana),
+    minutos_corrida: opcional(f.minutos_corrida),
   };
 }
 
@@ -273,7 +277,7 @@ export default function Perfil() {
             opcoes={["1", "2", "3", "4", "5", "6", "7"].map((d) => [d, d])}
             aoMudar={(v) => mudar("dias_semana", v)}
           />
-          {numero("minutos_sessao", "Minutos por sessão", "min", 15, 180)}
+          {numero("minutos_sessao", "Minutos de musculação por sessão", "min", 15, 180)}
           <Escolha
             nome="equipamento"
             rotulo="Onde você treina"
@@ -290,7 +294,7 @@ export default function Perfil() {
 
         <Grupo
           titulo="CORRIDA"
-          nota="Opcional. Sem escolher: iniciante, corrida no mesmo dia da academia se você treina até 4 dias (em dias separados a partir de 5) e 3 corridas por semana."
+          nota="Opcional. O tempo de corrida é separado do de musculação. Sem escolher: iniciante, corrida no mesmo dia da academia se você treina até 4 dias (em dias separados a partir de 5) e 3 corridas por semana. O coach usa isso como ponto de partida e conversa com você antes de montar o plano."
           destaque
         >
           <Escolha
@@ -323,6 +327,7 @@ export default function Perfil() {
             opcoes={["1", "2", "3", "4", "5", "6", "7"].map((d) => [d, d])}
             aoMudar={(v) => mudar("corridas_semana", v)}
           />
+          {numero("minutos_corrida", "Minutos de corrida por sessão", "min", 10, 240, false)}
         </Grupo>
 
         <Grupo titulo="OPCIONAL" nota="Deixe em branco o que não souber." destaque>

@@ -2496,8 +2496,30 @@ input[type="number"] {
   margin: 0;
   font-size: 14px;
 }
-.treino__notas {
+
+.aprovacao__mudancas {
   margin: 0;
   padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   font-size: 14px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.treino__recomecar {
+  align-self: flex-start;
+  appearance: none;
+  background: none;
+  border: 1px solid var(--trilho);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--mudo);
+  cursor: pointer;
+}
+.treino__recomecar:hover:not(:disabled) {
+  color: var(--prot);
+  border-color: var(--prot);
 }
