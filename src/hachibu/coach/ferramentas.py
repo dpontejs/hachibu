@@ -20,7 +20,7 @@ from hachibu.diario import (
 from hachibu.metas import PISO_KCAL, Metas, calcular_metas, diagnostico, gasto_diario
 from hachibu.perfil import ler_perfil as _ler_perfil
 from hachibu.treino.base import gerar_plano_base
-from hachibu.treino.diferencas import diferencas
+from hachibu.treino.diferencas import diferencas, resumo_semana
 from hachibu.treino.exercicios import buscar as buscar_no_catalogo
 from hachibu.treino.exercicios import por_id
 from hachibu.treino.modelos import PlanoIn
@@ -249,8 +249,9 @@ def buscar_exercicio(db, user_id: int, termo: str) -> list[dict]:
     ][:15]
 
 
-def validar_proposta(db, user_id: int, plano: PlanoIn, versao_base: int | None = None) -> list[str]:
-    """Valida contra o perfil e a versão de partida; devolve as mudanças que o aluno vai ver no card.
+def validar_proposta(db, user_id: int, plano: PlanoIn, versao_base: int | None = None) -> dict:
+    """Valida contra o perfil e a versão de partida; devolve o que o card mostra: as mudanças (vazio no
+    primeiro plano) e a semana proposta em estrutura.
 
     `versao_base` é a versão que o coach leu ao montar a proposta. Se o plano ativo for outro (o aluno aprovou
     outra proposta no meio), aplicar esta desfaria aquela em silêncio: recusa.
@@ -272,9 +273,9 @@ def validar_proposta(db, user_id: int, plano: PlanoIn, versao_base: int | None =
     if erros:
         raise ErroFerramenta("a proposta não passa nas regras do plano: " + " | ".join(erros))
     mudancas = diferencas(anterior, plano)
-    if not mudancas:
+    if anterior is not None and not mudancas:
         raise ErroFerramenta("nada muda em relação ao plano atual. Confira o que o aluno pediu.")
-    return mudancas
+    return {"mudancas": mudancas, "semana": resumo_semana(plano)}
 
 
 def aplicar_plano(db, user_id: int, plano: PlanoIn, versao_base: int | None = None) -> dict:

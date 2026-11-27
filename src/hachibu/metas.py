@@ -36,6 +36,8 @@ class PerfilIn(BaseModel):
     corridas_semana: int | None = Field(default=None, ge=1, le=7)
     # Tempo da corrida, separado do da musculação (minutos_sessao): um não desconta do outro.
     minutos_corrida: int | None = Field(default=None, ge=10, le=240)
+    # Cardio de baixa intensidade (bicicleta, elíptico…), separado da corrida e da musculação.
+    minutos_cardio: int | None = Field(default=None, ge=5, le=120)
 
 
 class Metas(BaseModel):

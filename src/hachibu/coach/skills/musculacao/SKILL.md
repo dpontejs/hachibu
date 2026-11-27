@@ -17,6 +17,15 @@ description: treino de força, volume por grupo muscular, substituição de exer
 - Ao trocar um exercício a pedido do aluno, mantenha o mesmo papel no treino (grupo e padrão de movimento)
   e as mesmas séries e repetições, a menos que ele peça outra coisa.
 
+## Cardio de baixa intensidade
+- Fica no campo `cardio` do dia: modalidade (bicicleta, elíptico, caminhada, escada, remo), minutos e
+  intensidade (leve ou moderada). É separado da corrida e da musculação, com o tempo próprio do perfil
+  (`minutos_cardio`).
+- Leve (dá para conversar, esforço 2–4) pode ser todo dia, inclusive no descanso: ajuda na perda de peso, no
+  condicionamento e na recuperação, sem atrapalhar a musculação. Moderado conta como dia de treino e não vai
+  no dia seguinte a um treino pesado de perna.
+- Pergunte a preferência: todo dia ou alternado, qual modalidade, quanto tempo.
+
 ## Substituições equivalentes
 Troque por um exercício do **mesmo padrão de movimento e grupo**, respeitando o equipamento do perfil:
 - Supino reto ↔ supino com halteres ↔ flexão de braços (peso corporal).

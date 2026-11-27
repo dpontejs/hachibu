@@ -7,7 +7,7 @@ O que não pôde seguir a preferência do aluno vira um ponto para o coach conve
 """
 
 from hachibu.metas import PerfilIn
-from hachibu.treino.modelos import CorridaPlano, DiaPlano, ExercicioPlano, PlanoIn
+from hachibu.treino.modelos import CardioPlano, CorridaPlano, DiaPlano, ExercicioPlano, PlanoIn
 from hachibu.treino.progressao import DURACAO_MAXIMA, corrida_da_semana
 from hachibu.treino.validador import DIAS as DIAS_NOMES
 from hachibu.treino.validador import SEGUNDOS_POR_SERIE, TOLERANCIA_DURACAO, perna_pesada
@@ -244,14 +244,33 @@ def gerar_plano_base(perfil: PerfilIn) -> tuple[PlanoIn, list[str]]:
             dia.exercicios = _exercicios(dia.nome, perfil, perfil.minutos_sessao * 60)
         else:
             dia.nome = "Corrida"
-    # 7 dias marcados: o dia livre vira recuperação, e o coach pergunta se o aluno prefere descanso total.
+    # Cardio leve (bicicleta na academia, caminhada fora dela), separado da corrida e da musculação.
+    modalidade = "bicicleta" if perfil.equipamento == "academia" else "caminhada"
+    if perfil.minutos_cardio:
+        for dia in dias:
+            dia.cardio = CardioPlano(
+                modalidade=modalidade, duracao_min=perfil.minutos_cardio, intensidade="leve"
+            )
+        pontos.append(
+            f"Coloquei {perfil.minutos_cardio} min de cardio leve ({modalidade}) todos os dias. "
+            "Prefere em dias alternados, outra modalidade ou algum dia moderado?"
+        )
+    elif perfil.objetivo == "perder":
+        pontos.append(
+            "Para perder peso, cardio leve quase todo dia ajuda (bicicleta, caminhada). Quer incluir? "
+            "Se sim, quantos minutos por dia?"
+        )
+    # 7 dias marcados: o dia livre vira recuperação (cardio leve), e o coach pergunta se prefere descanso.
     if perfil.dias_semana == 7:
         livre = next(d for d in dias if not d.exercicios and not d.corrida)
         livre.nome = "Recuperação"
-        livre.corrida = CorridaPlano(tipo="recuperacao", duracao_min=RECUPERACAO_MIN, esforco_alvo="1-3")
+        if livre.cardio is None:
+            livre.cardio = CardioPlano(
+                modalidade="caminhada", duracao_min=RECUPERACAO_MIN, intensidade="leve"
+            )
         pontos.append(
-            f"Você marcou 7 dias: deixei {DIAS_NOMES[livre.dia]} como recuperação (caminhada leve ou "
-            "mobilidade). Prefere descanso total nesse dia?"
+            f"Você marcou 7 dias: deixei {DIAS_NOMES[livre.dia]} como recuperação (cardio leve). "
+            "Prefere descanso total nesse dia?"
         )
     _proteger_treinos_duros(dias, nivel_corrida, maximo_corrida)
     return PlanoIn(dias=dias), pontos

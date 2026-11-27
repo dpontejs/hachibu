@@ -171,15 +171,16 @@ def criar_tools(
 
     @tool
     def propor_plano(plano: PlanoIn, justificativa: str, versao_base: int | None = None) -> str:
-        """Propõe a semana INTEIRA de treino (7 dias, 0 = segunda) para o aluno aprovar. Mantenha igual o que
-        ele não pediu para mudar. versao_base: a versão do plano de que você partiu (versao em ler_plano ou
-        versao_atual em rascunho_plano; vazio se ele ainda não tem plano). O sistema valida as regras e mostra
-        ao aluno só o que muda. Só grava depois da aprovação."""
+        """Propõe a semana INTEIRA de treino (7 dias, 0 = segunda; cada dia com exercícios, corrida e cardio)
+        para o aluno aprovar. Mantenha igual o que ele não pediu para mudar. versao_base: a versão
+        do plano de que você partiu (versao em ler_plano ou versao_atual em rascunho_plano; vazio se
+        ele ainda não tem plano). O sistema valida as regras e mostra ao aluno só o que muda. Só
+        grava depois da aprovação."""
         db = connect(db_path)
         try:
             # Valida antes de pedir aprovação: proposta inválida nunca chega ao aluno. (Na retomada esta
             # validação roda de novo: se o perfil ou o plano mudou, nada é gravado e o modelo sabe por quê.)
-            mudancas = f.validar_proposta(db, user_id, plano, versao_base)
+            card = f.validar_proposta(db, user_id, plano, versao_base)
         except f.ErroFerramenta as e:
             return (
                 f"erro: {e} (se o aluno já tinha aprovado esta proposta, nada foi gravado: "
@@ -193,8 +194,12 @@ def criar_tools(
         decisao = interrupt(
             {
                 "ferramenta": "propor_plano",
-                "args": {"justificativa": justificativa, "mudancas": mudancas},
-                "descricao": f"Plano de treino: {len(mudancas)} mudança(s). Motivo: {justificativa}",
+                "args": {"justificativa": justificativa, **card},
+                "descricao": (
+                    f"Plano de treino: {len(card['mudancas'])} mudança(s). Motivo: {justificativa}"
+                    if card["mudancas"]
+                    else f"Primeiro plano de treino. Motivo: {justificativa}"
+                ),
             }
         )
         if not decisao.get("aprovar"):
