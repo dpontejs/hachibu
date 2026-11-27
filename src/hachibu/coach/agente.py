@@ -148,7 +148,9 @@ def responder(
     except GraphRecursionError:
         historico_ = agente.get_state(config).values.get("messages", [])
         return RespostaCoach([*montar_mensagens(historico_), Mensagem("coach", DESISTENCIA)], None)
-    pausas = resultado.get("__interrupt__") or []
+    # A proposta mostrada sai do estado salvo, a mesma fonte que a decisão usa para retomar: com duas pausas,
+    # a ordem em resultado["__interrupt__"] pode diferir e o card não corresponderia à decisão.
+    pausas = agente.get_state(config).interrupts
     pendente = Pendente(**pausas[0].value) if pausas else None
     return RespostaCoach(montar_mensagens(resultado["messages"]), pendente)
 
