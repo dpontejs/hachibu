@@ -1,10 +1,10 @@
 # Hachibu
 
-Coach pessoal de treino, corrida e dieta com agentes de IA. Projeto final de IA Agêntica (2026.2).
+Coach pessoal de treino, corrida e dieta com IA: um agente com skills por domínio (nutrição, musculação, corrida) que lê e atualiza o seu dia, sempre pedindo aprovação antes de mudar metas ou planos.
 
 **No ar:** https://hachibu.diegoponte.dev (cadastro com código de convite)
 
-O relatório técnico completo (problema, arquitetura, comparação entre workflow, agente único e multiagente, avaliação) entra aqui ao fim do projeto. O design está em [`docs/features/hachibu.md`](docs/features/hachibu.md).
+O design, as decisões e as próximas etapas estão em [`docs/features/hachibu.md`](docs/features/hachibu.md).
 
 ## Estado atual
 
