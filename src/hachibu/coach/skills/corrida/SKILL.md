@@ -11,6 +11,15 @@ description: plano de corrida, ritmos e zonas, progressão de volume, longão e 
 - **Intervalado (8 a 9):** tiros curtos com recuperação; não dá para conversar.
 Sem teste de 5 km, planeje por tempo e esforço percebido. Com o teste, os ritmos-alvo saem do cálculo do sistema.
 
+## Começando do zero (iniciante)
+- O sistema tem uma progressão própria de corrida e caminhada em 9 semanas (de 1 min correndo + 2 andando
+  até 25 min contínuos), que avança sozinha conforme o aluno registra as corridas. No plano, marque os dias
+  de corrida do iniciante com `progressao: true` em vez de inventar blocos.
+- Quem está sem preparo físico: comece pela progressão mesmo que a pessoa se ache capaz de mais; é mais
+  fácil subir do que se recuperar de uma lesão.
+- Dia de recuperação (`tipo: "recuperacao"`, até 40 min, esforço 1–3): caminhada leve ou mobilidade. É a
+  opção para quem quer se mexer todo dia sem abrir mão de um dia sem treino pesado.
+
 ## Progressão
 - **Regra dos 10%:** o volume semanal sobe no máximo 10% de uma semana para a outra.
 - A cada 3 ou 4 semanas, uma semana mais leve (volume 20 a 30% menor).

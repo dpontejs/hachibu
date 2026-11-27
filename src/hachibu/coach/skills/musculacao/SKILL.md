@@ -11,6 +11,12 @@ description: treino de força, volume por grupo muscular, substituição de exer
 - **Proximidade da falha:** a maioria das séries termina com 1 a 3 repetições "na reserva".
 - **Descanso entre séries:** 2 a 3 min nos compostos, 1 a 2 min nos isolados.
 
+## Plano no Hachibu
+- Os exercícios do plano vêm do catálogo do sistema: ache o id com `buscar_exercicio` (já filtra pelo
+  equipamento do aluno). Um exercício que não está no catálogo não pode entrar no plano.
+- Ao trocar um exercício a pedido do aluno, mantenha o mesmo papel no treino (grupo e padrão de movimento)
+  e as mesmas séries e repetições, a menos que ele peça outra coisa.
+
 ## Substituições equivalentes
 Troque por um exercício do **mesmo padrão de movimento e grupo**, respeitando o equipamento do perfil:
 - Supino reto ↔ supino com halteres ↔ flexão de braços (peso corporal).

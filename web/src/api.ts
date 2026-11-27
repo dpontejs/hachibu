@@ -213,8 +213,6 @@ export interface PlanoTreino {
   dias: DiaTreino[];
   /** O que deixou de valer com o perfil atual (vazio = plano válido). */
   avisos: string[];
-  /** O que o plano base não pôde seguir das suas preferências, e por quê. */
-  notas: string[];
   tem_condicoes: boolean;
 }
 
@@ -499,8 +497,6 @@ export const api = {
       throw e;
     }
   },
-  gerarPlano: (substituir = false) =>
-    request<unknown>("POST", substituir ? "/plano/base?substituir=true" : "/plano/base"),
   coachConversas: () => request<{ conversas: ConversaCoach[] }>("GET", "/coach/conversas"),
   /** `null` quando a thread não existe ou não é do usuário (404): vira conversa nova. */
   async coachHistorico(threadId: string): Promise<RespostaCoach | null> {
@@ -524,7 +520,6 @@ export function mensagemDeErro(e: unknown): string | null {
     if (e.status === 503 && e.detail === "coach_indisponivel") return MSG_COACH_FORA;
     if (e.status === 409 && e.detail === "aprovacao_pendente")
       return "Responda o pedido acima (aprovar ou recusar) antes de mandar outra mensagem.";
-    if (e.detail === "plano_existente") return "Você já tem um plano (talvez criado em outra aba). Recarregue a tela.";
     if (e.detail === "memoria_repetida") return "Isso já está na lista.";
     if (e.detail === "limite_de_memorias") return "A lista desse tipo está cheia. Apague algo que não vale mais.";
     if (e.detail === "memoria_inexistente") return "Essa memória não existe mais.";

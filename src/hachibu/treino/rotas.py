@@ -64,8 +64,6 @@ def obter_plano(user_id: UserId, db: Db) -> dict:
         "dias": montar_semana(plano, semana),
         # O perfil pode ter mudado depois do plano: o aluno vê o que deixou de valer.
         "avisos": validar_plano(plano, perfil, semana_corrida=semana),
-        # Pontos do rascunho que não seguiram a preferência (o coach conversa sobre eles antes de propor).
-        "notas": meta["notas"],
         "tem_condicoes": condicoes or bool(perfil.condicoes_saude and perfil.condicoes_saude.strip()),
     }
 

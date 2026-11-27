@@ -13,7 +13,7 @@ function numero(v: unknown): number | null {
 }
 
 /**
- * Card de aprovação de uma ação que o coach quer fazer (hoje, ajustar a meta).
+ * Card de aprovação de uma ação que o coach quer fazer (ajustar a meta, propor o plano de treino).
  * Nada muda no plano até o aluno tocar em Aprovar.
  */
 export default function Aprovacao({
@@ -30,6 +30,10 @@ export default function Aprovacao({
   const [recusando, setRecusando] = useState(false);
   const [motivo, setMotivo] = useState("");
   const ajuste = pendente.ferramenta === "ajustar_metas";
+  const plano = pendente.ferramenta === "propor_plano";
+  const mudancas = Array.isArray(pendente.args.mudancas)
+    ? pendente.args.mudancas.filter((m): m is string => typeof m === "string")
+    : [];
 
   useEffect(() => {
     if (!ajuste) return;
@@ -54,7 +58,7 @@ export default function Aprovacao({
       <header className="aprovacao__topo">
         <span className="aprovacao__sinal" aria-hidden="true" />
         <h3 id={titulo} className="rotulo px">
-          {ajuste ? "PEDIDO DE AJUSTE" : "PEDIDO DO COACH"}
+          {ajuste ? "PEDIDO DE AJUSTE" : plano ? "PROPOSTA DE PLANO" : "PEDIDO DO COACH"}
         </h3>
       </header>
 
@@ -84,6 +88,12 @@ export default function Aprovacao({
             );
           })}
         </dl>
+      ) : plano && mudancas.length > 0 ? (
+        <ul className="aprovacao__mudancas" aria-label="Mudanças" tabIndex={0}>
+          {mudancas.map((m, i) => (
+            <li key={i}>{m}</li>
+          ))}
+        </ul>
       ) : (
         <p className="aprovacao__descricao">{pendente.descricao}</p>
       )}

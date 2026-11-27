@@ -7,6 +7,8 @@ export const CHAVE_THREAD = "hachibu.coach.thread";
 export const EVENTO_FOTO = "hachibu:coach-foto";
 /** Desktop: outra tela pede para abrir o coach com uma mensagem já escrita (`detail` = texto). */
 export const EVENTO_MENSAGEM = "hachibu:coach-mensagem";
+/** Um plano de treino foi aprovado no coach: as telas que o mostram recarregam. */
+export const EVENTO_PLANO = "hachibu:plano-mudou";
 
 const CONSULTA_DESKTOP = "(min-width: 1024px)";
 

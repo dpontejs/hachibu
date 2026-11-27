@@ -27,10 +27,20 @@ class CorridaPlano(BaseModel):
     # recuperacao: caminhada leve ou mobilidade (esforço 1–3); conta como dia sem treino pesado.
     tipo: Literal["corrida_caminhada", "leve", "intervalado", "longao", "recuperacao"]
     duracao_min: int = Field(ge=5, le=240)
-    corre_min: float | None = Field(default=None, gt=0, le=240)
+    corre_min: float | None = Field(default=None, ge=0, le=240)
     anda_min: float | None = Field(default=None, ge=0, le=30)
     repeticoes: int | None = Field(default=None, ge=1, le=30)
     esforco_alvo: str = Field(max_length=10)
+
+    @model_validator(mode="after")
+    def _coerente(self):
+        if self.progressao and self.tipo != "corrida_caminhada":
+            raise ValueError("progressao só vale para tipo corrida_caminhada")
+        # O conversor de schema do Gemini obriga todos os campos: blocos fora de corrida e caminhada
+        # (ou zerados) são enchimento e viram None, para não virar diferença falsa nem plano estranho.
+        if self.tipo != "corrida_caminhada" or not self.corre_min:
+            self.corre_min = self.anda_min = self.repeticoes = None
+        return self
 
 
 class DiaPlano(BaseModel):

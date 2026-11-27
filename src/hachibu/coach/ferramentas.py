@@ -19,6 +19,13 @@ from hachibu.diario import (
 )
 from hachibu.metas import PISO_KCAL, Metas, calcular_metas, diagnostico, gasto_diario
 from hachibu.perfil import ler_perfil as _ler_perfil
+from hachibu.treino.base import gerar_plano_base
+from hachibu.treino.diferencas import diferencas
+from hachibu.treino.exercicios import buscar as buscar_no_catalogo
+from hachibu.treino.exercicios import por_id
+from hachibu.treino.modelos import PlanoIn
+from hachibu.treino.repositorio import gravar_plano, plano_ativo, semana_corrida
+from hachibu.treino.validador import validar_plano
 
 FUSO = "America/Sao_Paulo"
 DEFICIT_MAXIMO = 0.25
@@ -190,3 +197,86 @@ def esquecer_gosto(db, user_id: int, id_: int) -> dict:
             "Diga isso a ele e continue respeitando a restrição."
         )
     raise ErroFerramenta(f"não existe memória #{id_}. Confira os ids no bloco do aluno.")
+
+
+# ---------- treino ----------
+
+
+def _legenda(plano: PlanoIn) -> dict[str, str]:
+    return {
+        e.exercicio_id: (ex.nome if (ex := por_id(e.exercicio_id)) else e.exercicio_id)
+        for d in plano.dias
+        for e in d.exercicios
+    }
+
+
+def rascunho_plano(db, user_id: int) -> dict:
+    """Plano base em código a partir do perfil, com os pontos que não seguiram a preferência do aluno."""
+    plano, pontos = gerar_plano_base(_perfil(db, user_id))
+    ativo = plano_ativo(db, user_id)
+    return {
+        "plano": plano.model_dump(),
+        "legenda": _legenda(plano),
+        "pontos": pontos,
+        # A proposta leva esta versão em versao_base: se o plano mudar antes da aprovação, nada é gravado.
+        "versao_atual": ativo[0]["versao"] if ativo else None,
+    }
+
+
+def ler_plano(db, user_id: int) -> dict:
+    ativo = plano_ativo(db, user_id)
+    if ativo is None:
+        raise ErroFerramenta(
+            "o aluno ainda não tem plano de treino. Use rascunho_plano para começar a conversa."
+        )
+    meta, plano = ativo
+    semana = semana_corrida(db, user_id)
+    return {
+        "versao": meta["versao"],
+        "plano": plano.model_dump(),
+        "legenda": _legenda(plano),
+        "semana_corrida": semana,
+        "avisos": validar_plano(plano, _perfil(db, user_id), semana_corrida=semana),
+    }
+
+
+def buscar_exercicio(db, user_id: int, termo: str) -> list[dict]:
+    equipamento = _perfil(db, user_id).equipamento
+    return [
+        {"id": e.id, "nome": e.nome, "grupo": e.grupo}
+        for e in buscar_no_catalogo(termo)
+        if equipamento in e.equipamentos
+    ][:15]
+
+
+def validar_proposta(db, user_id: int, plano: PlanoIn, versao_base: int | None = None) -> list[str]:
+    """Valida contra o perfil e a versão de partida; devolve as mudanças que o aluno vai ver no card.
+
+    `versao_base` é a versão que o coach leu ao montar a proposta. Se o plano ativo for outro (o aluno aprovou
+    outra proposta no meio), aplicar esta desfaria aquela em silêncio: recusa.
+    """
+    perfil = _perfil(db, user_id)
+    ativo = plano_ativo(db, user_id)
+    versao_ativa = ativo[0]["versao"] if ativo else None
+    if versao_ativa != versao_base:
+        raise ErroFerramenta(
+            f"o plano mudou desde que esta proposta foi montada (agora é a versão {versao_ativa}). Nada foi "
+            "gravado: leia o plano de novo (ler_plano) e proponha a partir dele."
+        )
+    anterior = ativo[1] if ativo else None
+    # Primeiro plano: o volume de corrida não pode passar de 10% acima do rascunho em código.
+    referencia = anterior or gerar_plano_base(perfil)[0]
+    erros = sorted(
+        {e for s in range(1, 10) for e in validar_plano(plano, perfil, anterior=referencia, semana_corrida=s)}
+    )
+    if erros:
+        raise ErroFerramenta("a proposta não passa nas regras do plano: " + " | ".join(erros))
+    mudancas = diferencas(anterior, plano)
+    if not mudancas:
+        raise ErroFerramenta("nada muda em relação ao plano atual. Confira o que o aluno pediu.")
+    return mudancas
+
+
+def aplicar_plano(db, user_id: int, plano: PlanoIn, versao_base: int | None = None) -> dict:
+    validar_proposta(db, user_id, plano, versao_base)  # perfil ou plano podem ter mudado até a aprovação
+    return {"versao": gravar_plano(db, user_id, plano, "coach")}

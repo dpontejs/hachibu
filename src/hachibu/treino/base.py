@@ -186,6 +186,12 @@ def gerar_plano_base(perfil: PerfilIn) -> tuple[PlanoIn, list[str]]:
             f"(a de iniciante chega a {DURACAO_MAXIMA} min). Vale aumentar o tempo de corrida?"
         )
     maximo_corrida = int(limite) if limite is not None else 240
+    if nivel_corrida == "iniciante" and pedidas > 3:
+        pontos.append(
+            f"Você pediu {pedidas} corridas, mas a progressão de iniciante é de 3 corridas por semana. "
+            "Nos outros dias, quer uma recuperação (caminhada leve) ou só a musculação?"
+        )
+        pedidas = 3
 
     if modo == "mesmo_dia":
         n_musc = dias_treino

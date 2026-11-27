@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { api, mensagemDeErro, type CorridaDia, type DiaTreino, type PlanoTreino } from "../api";
-import { abrirCoachCom } from "../coach/abrir";
+import { abrirCoachCom, EVENTO_PLANO } from "../coach/abrir";
 
 const PEDIDO_MONTAR = "Quero montar meu plano de treino e corrida.";
 const PEDIDO_AJUSTAR = "Meu plano de treino não cabe mais no meu perfil. Me ajuda a ajustar?";
-const PEDIDO_PONTOS = "Vamos conversar sobre os pontos em aberto do meu plano de treino?";
 
 const DIAS = ["SEG", "TER", "QUA", "QUI", "SEX", "SAB", "DOM"];
 const SEMANAS_PROGRESSAO = 9;
@@ -83,6 +82,13 @@ export default function Treino() {
     void carregar();
   }, [carregar]);
 
+  // Plano aprovado no painel do coach (desktop): a semana mostrada muda junto.
+  useEffect(() => {
+    const recarregar = () => void carregar();
+    window.addEventListener(EVENTO_PLANO, recarregar);
+    return () => window.removeEventListener(EVENTO_PLANO, recarregar);
+  }, [carregar]);
+
   // PWA aberto de um dia para o outro: o "hoje" muda quando a tela volta.
   useEffect(() => {
     const atualizar = () => document.visibilityState === "visible" && setHojeIdx(diaDeHoje());
@@ -155,19 +161,6 @@ export default function Treino() {
           </ul>
           <button type="button" className="botao" onClick={() => pedir(PEDIDO_AJUSTAR)}>
             AJUSTAR COM O COACH
-          </button>
-        </section>
-      )}
-
-      {plano.notas.length > 0 && (
-        <section className="treino__notas" aria-label="Pontos para conversar">
-          <ul className="mudo">
-            {plano.notas.map((n) => (
-              <li key={n}>{n}</li>
-            ))}
-          </ul>
-          <button type="button" className="botao" onClick={() => pedir(PEDIDO_PONTOS)}>
-            CONVERSAR COM O COACH
           </button>
         </section>
       )}

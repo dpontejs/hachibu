@@ -2496,14 +2496,14 @@ input[type="number"] {
   margin: 0;
   font-size: 14px;
 }
-.treino__notas {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: flex-start;
-}
-.treino__notas ul {
+
+.aprovacao__mudancas {
   margin: 0;
   padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   font-size: 14px;
+  max-height: 260px;
+  overflow-y: auto;
 }
