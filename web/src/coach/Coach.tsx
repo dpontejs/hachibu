@@ -787,7 +787,13 @@ export default function Coach({
 
         {aguardando && !envio && pensando}
 
-        {pendente && !envio && <Aprovacao pendente={pendente} decidindo={decidindo} onDecidir={decidir} />}
+        {pendente && !envio && <Aprovacao
+            // Cada proposta é um card novo: recusar e receber outra não deixa o motivo antigo aberto.
+            key={JSON.stringify(pendente)}
+            pendente={pendente}
+            decidindo={decidindo}
+            onDecidir={decidir}
+          />}
 
         {erro && (
           <p className="aviso coach__erro" role="alert">

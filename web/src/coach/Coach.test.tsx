@@ -806,5 +806,36 @@ describe("Coach", () => {
     expect(within(card).getByRole("group", { name: /terça/i })).toHaveTextContent("Descanso");
     expect(within(card).queryByRole("list", { name: /mudanças/i })).not.toBeInTheDocument();
   });
+
+  it("recusar com motivo e receber uma proposta nova mostra o card novo limpo", async () => {
+    localStorage.setItem(CHAVE_THREAD, "t-r");
+    const proposta = (justificativa: string, mudanca: string) => ({
+      ferramenta: "propor_plano",
+      args: { justificativa, mudancas: [mudanca], semana: [] },
+      descricao: "Plano",
+    });
+    mockFetch((u, init) => {
+      if (u === "/api/coach/t-r")
+        return json({ thread_id: "t-r", mensagens: [], pendente: proposta("Cardio todo dia.", "seg: + bicicleta") });
+      if (u === "/api/coach/t-r/decisao" && init?.method === "POST")
+        return json({
+          thread_id: "t-r",
+          mensagens: [{ papel: "coach", texto: "Refiz: cardio só nos dias sem corrida.", ferramentas: [] }],
+          pendente: proposta("Cardio só nos dias sem corrida.", "ter: + bicicleta"),
+        });
+    });
+    const user = userEvent.setup();
+    renderCoach();
+    let card = await screen.findByRole("region", { name: /proposta de plano/i });
+    await user.click(within(card).getByRole("button", { name: /^recusar$/i }));
+    await user.type(within(card).getByRole("textbox", { name: /motivo/i }), "quero cardio só nos dias sem corrida");
+    await user.click(within(card).getByRole("button", { name: /confirmar recusa/i }));
+
+    expect(await screen.findByText("Refiz: cardio só nos dias sem corrida.")).toBeInTheDocument();
+    card = screen.getByRole("region", { name: /proposta de plano/i });
+    expect(within(card).getByText("ter: + bicicleta")).toBeInTheDocument();
+    expect(within(card).queryByRole("textbox", { name: /motivo/i })).not.toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: /^aprovar$/i })).toBeEnabled();
+  });
 });
 
