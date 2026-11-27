@@ -31,6 +31,27 @@ function carregar(src: string): Promise<HTMLImageElement> {
   });
 }
 
+function desenharFuji(f: CanvasRenderingContext2D, cx: number, chao: number, altura: number, meiaBase: number) {
+  const plato = 5; // meia-largura do topo achatado
+  const topo = chao - altura;
+  for (let x = Math.floor(cx - meiaBase); x <= Math.ceil(cx + meiaBase); x++) {
+    const d = Math.abs(x - cx);
+    const t = Math.max(0, (d - plato) / (meiaBase - plato));
+    const y = Math.round(topo + altura * t ** 1.4); // expoente > 1: encosta côncava, que abre na base
+    const esquerda = x < cx;
+    // Neve: base irregular com pontas descendo pelas ravinas (faixas de comprimentos variados).
+    const centro = Math.round(x / 6) * 6;
+    const comprimento = (((centro * 37) % 11) + 11) % 11; // 0 a 10, fixo por faixa
+    const ponta = Math.max(0, comprimento - Math.abs(x - centro) * 2);
+    const neveAte = topo + Math.round(altura * 0.17) + ponta - Math.round(t * 12);
+    for (let yy = y; yy < chao; yy++) {
+      if (yy <= neveAte) f.fillStyle = esquerda ? "#535c6e" : "#444c5c";
+      else f.fillStyle = esquerda ? "#1f242e" : "#1b1f28";
+      f.fillRect(x, yy, 1, 1);
+    }
+  }
+}
+
 export default function Cerejeira() {
   const ref = useRef<HTMLCanvasElement>(null);
 
@@ -42,8 +63,8 @@ export default function Cerejeira() {
     let vivo = true;
     const reduz = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 
-    Promise.all([carregar("/sprites/cerejeira.png"), carregar("/sprites/cerejeira-fundo.png")])
-      .then(([arvore, fundoArvore]) => {
+    carregar("/sprites/cerejeira.png")
+      .then((arvore) => {
         if (!vivo) return;
         const proporcao = canvas.clientWidth / Math.max(canvas.clientHeight, 1);
         // Em tela estreita (celular) a grade cresce até a árvore caber inteira na largura.
@@ -58,6 +79,9 @@ export default function Cerejeira() {
         fundo.width = W;
         fundo.height = H;
         const f = fundo.getContext("2d")!;
+        // Monte Fuji na camada mais distante: encostas côncavas, topo achatado e neve com "dentes".
+        // No celular não há espaço livre para ele: a árvore ocupa o alto e o texto, a base.
+        if (!retrato) desenharFuji(f, W * 0.47, chao, 92, 125);
         // Colinas ao fundo, em duas camadas.
         const camadas: [string, number, number, number, number][] = [
           ["#15181e", chao - 46, 14, 0.018, 1],
@@ -70,9 +94,6 @@ export default function Cerejeira() {
             f.fillRect(x, y, 1, chao - y);
           }
         }
-        // Árvore do fundo antes do chão: a raiz fica na mesma linha da árvore da frente,
-        // e o chão cobre qualquer pixel que passar dela.
-        if (!retrato) f.drawImage(fundoArvore, Math.round(W * 0.42), chao - fundoArvore.height + 2);
         // Chão com grama, tufos e florzinhas.
         f.fillStyle = "#0e1014";
         f.fillRect(0, chao, W, 8);
