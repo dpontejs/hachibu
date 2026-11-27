@@ -338,3 +338,21 @@ def test_cardio_leve_nao_conta_como_dia_de_treino():
         cardio=CardioPlano(modalidade="caminhada", duracao_min=30, intensidade="leve"),
     )
     assert validar_plano(plano, p) == []
+
+
+def test_recusa_com_motivo_e_nova_proposta_na_mesma_resposta(settings, aluno):
+    primeira = base().model_dump()
+    segunda = base().model_dump()
+    segunda["dias"][6]["cardio"] = {"modalidade": "bicicleta", "duracao_min": 20, "intensidade": "leve"}
+    modelo = roteiro(
+        chamada("propor_plano", {"plano": primeira, "justificativa": "primeira"}, "c1"),
+        chamada("propor_plano", {"plano": segunda, "justificativa": "cardio só sem corrida"}, "c2"),
+        "Refiz.",
+    )
+    r = falar(settings, modelo, "monta")
+    assert r.pendente.args["justificativa"] == "primeira"
+    r = falar(settings, modelo, decisao={"aprovar": False, "motivo": "cardio só nos dias sem corrida"})
+    assert r.pendente is not None and r.pendente.args["justificativa"] == "cardio só sem corrida"
+    assert ativo(settings) is None
+    falar(settings, modelo, decisao={"aprovar": True})
+    assert ativo(settings)[1].dias[6].cardio is not None
