@@ -24,11 +24,32 @@ def _corrida(c: CorridaPlano | None) -> str:
     return f"{c.tipo.replace('longao', 'longão')} {c.duracao_min} min"
 
 
-def _resumo(dia: DiaPlano) -> str:
-    partes = [_nome(e.exercicio_id) + f" {_prescricao(e)}" for e in dia.exercicios]
-    if dia.corrida:
-        partes.append(_corrida(dia.corrida))
-    return f"{DIAS[dia.dia]}: {dia.nome}" + (f" ({'; '.join(partes)})" if partes else "")
+def _corrida_legivel(c: CorridaPlano) -> str:
+    if c.progressao:
+        return "Corrida e caminhada · progressão de iniciante"
+    nomes = {
+        "leve": "Corrida leve",
+        "intervalado": "Intervalado",
+        "longao": "Longão",
+        "recuperacao": "Recuperação",
+    }
+    texto = f"{nomes.get(c.tipo, 'Corrida')} · {c.duracao_min} min"
+    return texto + (" de caminhada leve ou mobilidade" if c.tipo == "recuperacao" else "")
+
+
+def resumo_semana(plano: PlanoIn) -> list[dict]:
+    """A semana em estrutura para o card: dia, nome do treino, um exercício por item e a corrida."""
+    return [
+        {
+            "dia": DIAS[d.dia],
+            "nome": d.nome,
+            "itens": [
+                f"{_nome(e.exercicio_id)} · {e.series} × {e.reps_min}–{e.reps_max}" for e in d.exercicios
+            ],
+            "corrida": _corrida_legivel(d.corrida) if d.corrida else None,
+        }
+        for d in plano.dias
+    ]
 
 
 def _mesma_corrida(a: CorridaPlano | None, b: CorridaPlano | None) -> bool:
@@ -84,9 +105,10 @@ def _dia(antes: DiaPlano, depois: DiaPlano) -> list[str]:
 
 
 def diferencas(anterior: PlanoIn | None, novo: PlanoIn) -> list[str]:
-    """Sem plano anterior, o resumo de cada dia; com anterior, só o que mudou (vazio = nada mudou)."""
+    """O que mudou em relação ao plano anterior (vazio = nada mudou). Sem anterior não há "antes": vazio, e o
+    card mostra a semana (`resumo_semana`)."""
     if anterior is None:
-        return [_resumo(d) for d in novo.dias]
+        return []
     linhas: list[str] = []
     for a, d in zip(anterior.dias, novo.dias, strict=True):
         if _mesmo_dia(a, d):

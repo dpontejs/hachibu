@@ -67,9 +67,13 @@ def test_diferencas_series_e_corrida():
     assert any("domingo" in linha and "recuperação" in linha.lower() for linha in linhas)
 
 
-def test_diferencas_sem_plano_anterior_resume_a_semana():
-    linhas = diferencas(None, base())
-    assert len(linhas) == 7 and linhas[0].startswith("segunda:")
+def test_resumo_da_semana_em_estrutura():
+    from hachibu.treino.diferencas import resumo_semana
+
+    semana = resumo_semana(base())
+    assert len(semana) == 7
+    descanso = next(d for d in semana if d["nome"] == "Descanso")
+    assert descanso["itens"] == [] and descanso["corrida"] is None
 
 
 def test_diferencas_iguais_vazio():
@@ -119,7 +123,21 @@ def test_proposta_valida_pausa_e_aprovar_grava_versao_do_coach(settings, aluno):
     )
     r = falar(settings, modelo, "monta meu plano")
     assert r.pendente is not None and r.pendente.ferramenta == "propor_plano"
-    assert len(r.pendente.args["mudancas"]) == 7
+    semana = r.pendente.args["semana"]
+    assert r.pendente.args["mudancas"] == []  # primeiro plano: não há "antes", o card mostra a semana
+    assert [d["dia"] for d in semana] == [
+        "segunda",
+        "terça",
+        "quarta",
+        "quinta",
+        "sexta",
+        "sábado",
+        "domingo",
+    ]
+    segunda = semana[0]
+    assert segunda["nome"] == "Superior A"
+    assert segunda["itens"][0] == "Supino reto com barra · 3 × 8–12"
+    assert segunda["corrida"].startswith("Corrida e caminhada")
     assert ativo(settings) is None  # nada gravado antes de aprovar
     r = falar(settings, modelo, decisao={"aprovar": True})
     meta, gravado = ativo(settings)
@@ -161,6 +179,7 @@ def test_proposta_de_troca_mostra_so_a_mudanca(settings, aluno):
     )
     r = falar(settings, modelo, "troca o agachamento")
     assert len(r.pendente.args["mudancas"]) == 1
+    assert len(r.pendente.args["semana"]) == 7  # a semana inteira vai junto, para ver se quiser
 
 
 def test_perfil_mudou_antes_de_aprovar_revalida(settings, aluno):

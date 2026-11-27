@@ -179,7 +179,7 @@ def criar_tools(
         try:
             # Valida antes de pedir aprovação: proposta inválida nunca chega ao aluno. (Na retomada esta
             # validação roda de novo: se o perfil ou o plano mudou, nada é gravado e o modelo sabe por quê.)
-            mudancas = f.validar_proposta(db, user_id, plano, versao_base)
+            card = f.validar_proposta(db, user_id, plano, versao_base)
         except f.ErroFerramenta as e:
             return (
                 f"erro: {e} (se o aluno já tinha aprovado esta proposta, nada foi gravado: "
@@ -193,8 +193,12 @@ def criar_tools(
         decisao = interrupt(
             {
                 "ferramenta": "propor_plano",
-                "args": {"justificativa": justificativa, "mudancas": mudancas},
-                "descricao": f"Plano de treino: {len(mudancas)} mudança(s). Motivo: {justificativa}",
+                "args": {"justificativa": justificativa, **card},
+                "descricao": (
+                    f"Plano de treino: {len(card['mudancas'])} mudança(s). Motivo: {justificativa}"
+                    if card["mudancas"]
+                    else f"Primeiro plano de treino. Motivo: {justificativa}"
+                ),
             }
         )
         if not decisao.get("aprovar"):
