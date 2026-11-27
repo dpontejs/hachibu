@@ -11,6 +11,7 @@ import {
   type Objetivo,
   type Perfil as DadosPerfil,
   type Sexo,
+  type CorridaQuando,
 } from "../api";
 import Diagnostico from "../components/Diagnostico";
 import Memorias from "../components/Memorias";
@@ -33,6 +34,9 @@ interface Form {
   meta_profissional_proteina_g: string;
   meta_profissional_carbo_g: string;
   meta_profissional_gordura_g: string;
+  nivel_corrida: Nivel | "";
+  corrida_quando: CorridaQuando | "";
+  corridas_semana: string;
 }
 
 const VAZIO: Form = {
@@ -52,6 +56,9 @@ const VAZIO: Form = {
   meta_profissional_proteina_g: "",
   meta_profissional_carbo_g: "",
   meta_profissional_gordura_g: "",
+  nivel_corrida: "",
+  corrida_quando: "",
+  corridas_semana: "",
 };
 
 function deApi(p: DadosPerfil): Form {
@@ -73,6 +80,9 @@ function deApi(p: DadosPerfil): Form {
     meta_profissional_proteina_g: s(p.meta_profissional_proteina_g),
     meta_profissional_carbo_g: s(p.meta_profissional_carbo_g),
     meta_profissional_gordura_g: s(p.meta_profissional_gordura_g),
+    nivel_corrida: p.nivel_corrida ?? "",
+    corrida_quando: p.corrida_quando ?? "",
+    corridas_semana: s(p.corridas_semana),
   };
 }
 
@@ -96,6 +106,9 @@ function paraApi(f: Form): DadosPerfil {
     meta_profissional_proteina_g: opcional(f.meta_profissional_proteina_g),
     meta_profissional_carbo_g: opcional(f.meta_profissional_carbo_g),
     meta_profissional_gordura_g: opcional(f.meta_profissional_gordura_g),
+    nivel_corrida: f.nivel_corrida || null,
+    corrida_quando: f.corrida_quando || null,
+    corridas_semana: opcional(f.corridas_semana),
   };
 }
 
@@ -272,6 +285,43 @@ export default function Perfil() {
               ["peso_corporal", "Só peso corporal"],
             ]}
             aoMudar={(v) => mudar("equipamento", v as Equipamento)}
+          />
+        </Grupo>
+
+        <Grupo
+          titulo="CORRIDA"
+          nota="Opcional. Sem escolher: iniciante, corrida no mesmo dia da academia se você treina até 4 dias (em dias separados a partir de 5) e 3 corridas por semana."
+          destaque
+        >
+          <Escolha
+            nome="nivel_corrida"
+            rotulo="Experiência com corrida"
+            valor={form.nivel_corrida}
+            opcoes={[
+              ["iniciante", "Começando agora"],
+              ["intermediario", "Corro às vezes"],
+              ["avancado", "Corro com frequência"],
+            ]}
+            aoMudar={(v) => mudar("nivel_corrida", v as Nivel)}
+          />
+          <Escolha
+            nome="corrida_quando"
+            rotulo="Quando correr"
+            valor={form.corrida_quando}
+            opcoes={[
+              ["automatico", "Automático"],
+              ["mesmo_dia", "Depois da musculação"],
+              ["dias_separados", "Em dias separados"],
+            ]}
+            aoMudar={(v) => mudar("corrida_quando", v as CorridaQuando)}
+          />
+          <Escolha
+            nome="corridas_semana"
+            rotulo="Corridas por semana"
+            valor={form.corridas_semana}
+            compacta
+            opcoes={["1", "2", "3", "4", "5", "6", "7"].map((d) => [d, d])}
+            aoMudar={(v) => mudar("corridas_semana", v)}
           />
         </Grupo>
 
