@@ -11,6 +11,7 @@ from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel, Field
 
 from hachibu.coach import ferramentas as f
+from hachibu.coach.foto import analisar_foto, casar_com_taco
 from hachibu.coach.skills import criar_tool_carregar_skill
 from hachibu.db import connect
 
@@ -24,7 +25,15 @@ def _json(valor) -> str:
     return json.dumps(valor, ensure_ascii=False, default=str)
 
 
-def criar_tools(db_path: str, user_id: int, agora: Callable[[], datetime]) -> list[BaseTool]:
+def criar_tools(
+    db_path: str,
+    user_id: int,
+    agora: Callable[[], datetime],
+    foto: tuple[bytes, str] | None = None,
+    visao=None,
+) -> list[BaseTool]:
+    """`foto` é a imagem anexada à mensagem atual (bytes, mime); `visao`, o modelo que a analisa."""
+
     def rodar(funcao, *args, **kwargs) -> str:
         db = connect(db_path)
         try:
@@ -79,6 +88,20 @@ def criar_tools(db_path: str, user_id: int, agora: Callable[[], datetime]) -> li
         gasto diário são recusadas pelo sistema."""
         return rodar(f.aplicar_ajuste_metas, kcal, agora(), proteina_g, carbo_g, gordura_g)
 
+    @tool
+    def analisar_foto_refeicao() -> str:
+        """Analisa a foto de prato anexada à mensagem atual: lista os alimentos com gramas estimadas, já
+        casados com a TACO (alimento_id e kcal). Não registra nada: mostre a lista ao aluno e só chame
+        registrar_refeicao depois que ele confirmar ou corrigir."""
+        if foto is None or visao is None:
+            return "erro: nenhuma foto foi anexada nesta mensagem. Peça para o aluno enviar a foto."
+        db = connect(db_path)
+        try:
+            itens = analisar_foto(visao, *foto)
+            return _json({"itens": casar_com_taco(db, itens)})
+        finally:
+            db.close()
+
     return [
         ler_perfil,
         ler_diagnostico,
@@ -87,5 +110,6 @@ def criar_tools(db_path: str, user_id: int, agora: Callable[[], datetime]) -> li
         registrar_refeicao,
         registrar_agua,
         ajustar_metas,
+        analisar_foto_refeicao,
         criar_tool_carregar_skill(),
     ]
