@@ -31,54 +31,6 @@ function carregar(src: string): Promise<HTMLImageElement> {
   });
 }
 
-const BAYER = [
-  [0, 8, 2, 10],
-  [12, 4, 14, 6],
-  [3, 11, 1, 9],
-  [15, 7, 13, 5],
-];
-
-function ruido(n: number): number {
-  const x = Math.sin(n * 127.1) * 43758.5453;
-  return x - Math.floor(x); // 0..1 determinístico
-}
-
-/**
- * Monte Fuji noturno. A textura vem do ângulo a partir do pico (cristas e ravinas irradiam em diagonal),
- * a neve desce mais ao longo das cristas e o lado esquerdo recebe a luz.
- */
-function desenharFuji(f: CanvasRenderingContext2D, cx: number, chao: number, altura: number, meiaBase: number) {
-  const topo = chao - altura;
-  const plato = 6;
-  const ROCHA = ["#191d28", "#1f2431", "#272d3c", "#323a4c"]; // sombra → crista iluminada
-  const NEVE = ["#4a5367", "#636c82", "#7f899f", "#9ca6ba"];
-  for (let x = Math.floor(cx - meiaBase * 1.1); x <= Math.ceil(cx + meiaBase); x++) {
-    const dx = x - cx;
-    // Leve assimetria: a saia esquerda é um pouco mais longa.
-    const largura = dx < 0 ? meiaBase * 1.1 : meiaBase;
-    const t = Math.max(0, (Math.abs(dx) - plato) / (largura - plato));
-    if (t > 1) continue;
-    const y0 = Math.round(topo + altura * t ** 0.85 + (ruido(Math.floor(x / 2)) - 0.5) * 1.2);
-    for (let y = y0; y < chao; y++) {
-      const dy = y - topo + 2;
-      const angulo = Math.atan2(dx, dy); // 0 = direto para baixo a partir do pico
-      // Cristas: listras no ângulo, com ondulação para não ficarem retas demais.
-      const crista = Math.sin(angulo * 16 + Math.sin(dy * 0.15) * 0.6 + ruido(Math.round(angulo * 20)) * 2);
-      // Luz gradual de um lado para o outro (sem emenda no meio).
-      const lado = -dx / (Math.abs(dx) + 10);
-      const luz = 0.1 + lado * 0.45 + crista * 0.45 + (BAYER[y & 3][x & 3] / 16 - 0.5) * 0.35;
-      // Neve: ~28% da altura, descendo mais nas cristas (dedos) e menos nas bordas.
-      const dedo = crista > 0.2 ? Math.min((crista - 0.2) * 0.32, 0.2) : 0;
-      const profundidadeNeve = altura * (0.28 + dedo) * (1 - Math.abs(dx) / largura * 0.35);
-      const naNeve = y - topo < profundidadeNeve + (BAYER[y & 3][x & 3] / 16) * 2;
-      const tons = naNeve ? NEVE : ROCHA;
-      const nivel = luz > 0.65 ? 3 : luz > 0.15 ? 2 : luz > -0.35 ? 1 : 0;
-      f.fillStyle = tons[nivel];
-      f.fillRect(x, y, 1, 1);
-    }
-  }
-}
-
 export default function Cerejeira() {
   const ref = useRef<HTMLCanvasElement>(null);
 
@@ -90,8 +42,8 @@ export default function Cerejeira() {
     let vivo = true;
     const reduz = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 
-    carregar("/sprites/cerejeira.png")
-      .then((arvore) => {
+    Promise.all([carregar("/sprites/cerejeira.png"), carregar("/sprites/cerejeira-fundo.png")])
+      .then(([arvore, fundoArvore]) => {
         if (!vivo) return;
         const proporcao = canvas.clientWidth / Math.max(canvas.clientHeight, 1);
         // Em tela estreita (celular) a grade cresce até a árvore caber inteira na largura.
@@ -106,10 +58,6 @@ export default function Cerejeira() {
         fundo.width = W;
         fundo.height = H;
         const f = fundo.getContext("2d")!;
-        // Monte Fuji na camada mais distante: encostas côncavas, topo achatado e neve com "dentes".
-        // No celular não há espaço livre para ele: a árvore ocupa o alto e o texto, a base.
-        // Perto do nome: o pico fica logo à direita do logo, e a saia passa por trás do texto.
-        if (!retrato) desenharFuji(f, Math.max(W * 0.38, 150), chao, 100, 150);
         // Colinas ao fundo, em duas camadas.
         const camadas: [string, number, number, number, number][] = [
           ["#15181e", chao - 46, 14, 0.018, 1],
@@ -122,6 +70,9 @@ export default function Cerejeira() {
             f.fillRect(x, y, 1, chao - y);
           }
         }
+        // Árvore do fundo antes do chão: a raiz fica na mesma linha da árvore da frente,
+        // e o chão cobre qualquer pixel que passar dela.
+        if (!retrato) f.drawImage(fundoArvore, Math.round(W * 0.42), chao - fundoArvore.height + 2);
         // Chão com grama, tufos e florzinhas.
         f.fillStyle = "#0e1014";
         f.fillRect(0, chao, W, 8);
