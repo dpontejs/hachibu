@@ -395,7 +395,7 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
       <form className={bloqueado ? "compositor compositor--bloqueado" : "compositor"} onSubmit={aoEnviar}>
         {dicaCamera && !foto && (
           <p className="compositor__dica">
-            Toque na <span className="px">CAMERA</span> para fotografar o prato.
+            Toque na <span className="px">CAMERA</span> para tirar ou escolher a foto do prato.
           </p>
         )}
         {foto && (
@@ -428,7 +428,6 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
             className="so-leitor"
             type="file"
             accept="image/*"
-            capture="environment"
             aria-label="Foto da refeição"
             tabIndex={-1}
             onChange={escolherFoto}
@@ -436,7 +435,7 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
           <button
             type="button"
             className={dicaCamera ? "compositor__camera compositor__camera--dica" : "compositor__camera"}
-            aria-label="Abrir câmera"
+            aria-label="Foto: câmera ou galeria"
             onClick={() => seletor.current?.click()}
             disabled={ocupado || bloqueado}
           >

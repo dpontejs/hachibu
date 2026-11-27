@@ -260,6 +260,14 @@ describe("Coach", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/responda o pedido/i);
   });
 
+  it("o seletor de foto aceita câmera e galeria (sem forçar a câmera)", () => {
+    mockFetch(() => undefined);
+    renderCoach();
+    const seletor = screen.getByLabelText(/foto da refeição/i);
+    expect(seletor).toHaveAttribute("accept", "image/*");
+    expect(seletor).not.toHaveAttribute("capture");
+  });
+
   it("503 mostra que o coach está fora do ar", async () => {
     mockFetch((u) => (u === "/api/coach" ? json({ detail: "coach_indisponivel" }, 503) : undefined));
     const user = userEvent.setup();
