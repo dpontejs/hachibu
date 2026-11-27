@@ -34,6 +34,8 @@ class PerfilIn(BaseModel):
     nivel_corrida: Literal["iniciante", "intermediario", "avancado"] | None = None
     corrida_quando: Literal["automatico", "mesmo_dia", "dias_separados"] | None = None
     corridas_semana: int | None = Field(default=None, ge=1, le=7)
+    # Tempo da corrida, separado do da musculação (minutos_sessao): um não desconta do outro.
+    minutos_corrida: int | None = Field(default=None, ge=10, le=240)
 
 
 class Metas(BaseModel):

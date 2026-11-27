@@ -1,12 +1,15 @@
 """Plano base a partir do perfil, sem LLM: o ponto de partida que o coach ajusta depois.
 
-Divisão pelos dias, séries pelo nível, exercícios pelo equipamento, corrida pelas preferências. A musculação
-encolhe (acessórios saem primeiro) para caber nos minutos da sessão junto com a corrida do mesmo dia.
+É o **rascunho** que o coach usa na conversa (o aluno nunca recebe um plano gerado em silêncio):
+divisão pelos dias, séries pelo nível, exercícios pelo equipamento, corrida pelas preferências.
+A musculação cabe nos minutos de musculação e a corrida nos de corrida (um não desconta do outro).
+O que não pôde seguir a preferência do aluno vira um ponto para o coach conversar.
 """
 
 from hachibu.metas import PerfilIn
 from hachibu.treino.modelos import CorridaPlano, DiaPlano, ExercicioPlano, PlanoIn
 from hachibu.treino.progressao import DURACAO_MAXIMA, corrida_da_semana
+from hachibu.treino.validador import DIAS as DIAS_NOMES
 from hachibu.treino.validador import SEGUNDOS_POR_SERIE, TOLERANCIA_DURACAO, perna_pesada
 
 # Um slot = o mesmo papel no treino em cada equipamento (academia, casa_halteres, peso_corporal).
@@ -51,6 +54,7 @@ DIVISAO = {
     3: ["Corpo inteiro A", "Corpo inteiro B", "Corpo inteiro A"],
     4: ["Superior A", "Inferior A", "Superior B", "Inferior B"],
     5: ["Superior A", "Inferior A", "Superior B", "Inferior B", "Superior A"],
+    6: ["Superior A", "Inferior A", "Superior B", "Inferior B", "Superior A", "Inferior A"],
 }
 # Dias da semana usados (0 = segunda), espalhando o descanso. Sempre sobra ao menos o domingo.
 POSICOES = {
@@ -63,7 +67,7 @@ POSICOES = {
 }
 # (séries, reps mín, reps máx, descanso) dos compostos; acessórios: uma série a menos, 10–15, 60 s.
 NIVEL = {"iniciante": (3, 10, 15, 75), "intermediario": (3, 8, 12, 90), "avancado": (4, 6, 10, 120)}
-MIN_MUSCULACAO_S = 600
+RECUPERACAO_MIN = 30
 # Iniciante treinando em casa: barra fixa e flexão nórdica são difíceis demais para começar.
 TROCA_INICIANTE = {"barra_fixa": "superman", "flexao_nordica": "ponte_gluteo"}
 LEVE = {"intermediario": 30, "avancado": 40}
@@ -164,47 +168,47 @@ def _proteger_treinos_duros(dias: list[DiaPlano], nivel_corrida: str, maximo_min
 
 
 def gerar_plano_base(perfil: PerfilIn) -> tuple[PlanoIn, list[str]]:
-    """Plano base e as notas do que não pôde seguir a preferência do aluno (e por quê)."""
-    notas: list[str] = []
-    dias_livres = min(perfil.dias_semana, 6)
-    m = perfil.minutos_sessao
+    """Rascunho do plano e os pontos em que ele não seguiu a preferência do aluno (para o coach perguntar)."""
+    pontos: list[str] = []
+    dias_treino = min(perfil.dias_semana, 6)
     nivel_corrida = perfil.nivel_corrida or "iniciante"
     pedidas = perfil.corridas_semana or 3
     quando = perfil.corrida_quando or "automatico"
-    cabe_separada = m * TOLERANCIA_DURACAO  # minutos de corrida num dia só de corrida
-    corrida_min = DURACAO_MAXIMA if nivel_corrida == "iniciante" else 15
-    modo = _modo(perfil, dias_livres)
+    modo = _modo(perfil, dias_treino)
     if quando == "dias_separados" and modo == "mesmo_dia":
-        notas.append("Com 1 dia de treino, a corrida ficou no mesmo dia da musculação.")
-    # No mesmo dia, a corrida e um mínimo de musculação precisam caber.
-    if modo == "mesmo_dia" and (m * 60 - corrida_min * 60) < MIN_MUSCULACAO_S:
-        if dias_livres >= 2 and corrida_min <= cabe_separada:
-            modo = "dias_separados"
-            if quando == "mesmo_dia":
-                notas.append(
-                    f"A corrida ficou em dias separados: com {m} min, não cabe junto com a musculação."
-                )
-        else:
-            pedidas = 0
-    if modo == "dias_separados" and corrida_min > cabe_separada:
+        pontos.append("Com 1 dia de treino, a corrida ficou no mesmo dia da musculação.")
+    limite = perfil.minutos_corrida * TOLERANCIA_DURACAO if perfil.minutos_corrida else None
+    minimo = DURACAO_MAXIMA if nivel_corrida == "iniciante" else 15
+    if limite is not None and minimo > limite:
         pedidas = 0
-    if pedidas == 0 and (perfil.corridas_semana or 3) > 0:
-        notas.append(
-            f"A corrida ficou de fora: com {m} min por sessão não há tempo para ela "
-            f"(a de iniciante precisa de uns {DURACAO_MAXIMA} min). Aumente os minutos ou peça ao coach."
+        pontos.append(
+            f"A corrida ficou de fora: com {perfil.minutos_corrida} min de corrida não cabe a sessão "
+            f"(a de iniciante chega a {DURACAO_MAXIMA} min). Vale aumentar o tempo de corrida?"
         )
+    maximo_corrida = int(limite) if limite is not None else 240
 
     if modo == "mesmo_dia":
-        n_musc = min(dias_livres, 5)
+        n_musc = dias_treino
         n_corrida = min(pedidas, n_musc)
         posicoes = POSICOES[n_musc]
         tipos_dia = ["M"] * n_musc
+        if n_corrida < pedidas:
+            pontos.append(
+                f"Você pediu {pedidas} corridas depois da musculação, mas são {n_musc} dias de musculação: "
+                f"ficaram {n_corrida}. Quer correr em algum dia sem musculação?"
+            )
     else:
         # Sobra musculação: pelo menos 2 dias quando há 4 ou mais, senão 1.
-        reserva = 2 if dias_livres >= 4 else 1
-        n_corrida = min(pedidas, dias_livres - reserva)
-        n_musc = min(dias_livres - n_corrida, 5)
+        reserva = 2 if dias_treino >= 4 else 1
+        n_corrida = min(pedidas, dias_treino - reserva)
+        n_musc = min(dias_treino - n_corrida, 6)
         posicoes = POSICOES[n_musc + n_corrida]
+        if n_corrida < pedidas:
+            pontos.append(
+                f"Você pediu {pedidas} corridas em dias separados; "
+                f"ficaram {n_corrida} para sobrar musculação. "
+                "Prefere correr depois da musculação em alguns dias?"
+            )
         # Alterna começando pela corrida: a de segunda vem depois do descanso de domingo.
         tipos_dia, c, mm = [], n_corrida, n_musc
         while c or mm:
@@ -214,8 +218,6 @@ def gerar_plano_base(perfil: PerfilIn) -> tuple[PlanoIn, list[str]]:
             else:
                 tipos_dia.append("M")
                 mm -= 1
-    if 0 < n_corrida < pedidas:
-        notas.append(f"Você pediu {pedidas} corridas por semana; ficaram {n_corrida} para sobrar musculação.")
 
     dias = [DiaPlano(dia=i, nome="Descanso") for i in range(7)]
     nomes = iter(DIVISAO[n_musc]) if n_musc else iter(())
@@ -228,23 +230,25 @@ def gerar_plano_base(perfil: PerfilIn) -> tuple[PlanoIn, list[str]]:
     else:
         com_corrida = {p for p, t in zip(posicoes, tipos_dia, strict=True) if t == "C"}
     tipos = iter(_tipos_de_corrida(nivel_corrida, n_corrida, modo == "mesmo_dia"))
-    maximo_separada = int(cabe_separada)
     for p in posicoes:
         dia = dias[p]
-        no_mesmo_dia = p in musc_dias
-        maximo = m - MIN_MUSCULACAO_S // 60 - 5 if no_mesmo_dia else maximo_separada
-        corrida = _corrida(nivel_corrida, next(tipos), maximo) if p in com_corrida else None
-        if no_mesmo_dia:
+        dia.corrida = _corrida(nivel_corrida, next(tipos), maximo_corrida) if p in com_corrida else None
+        if p in musc_dias:
             dia.nome = next(nomes)
-            reservado = (
-                (DURACAO_MAXIMA if corrida and corrida.progressao else corrida.duracao_min) if corrida else 0
-            )
-            dia.exercicios = _exercicios(dia.nome, perfil, m * 60 - reservado * 60)
+            dia.exercicios = _exercicios(dia.nome, perfil, perfil.minutos_sessao * 60)
         else:
             dia.nome = "Corrida"
-        dia.corrida = corrida
-    _proteger_treinos_duros(dias, nivel_corrida, maximo_separada)
-    return PlanoIn(dias=dias), notas
+    # 7 dias marcados: o dia livre vira recuperação, e o coach pergunta se o aluno prefere descanso total.
+    if perfil.dias_semana == 7:
+        livre = next(d for d in dias if not d.exercicios and not d.corrida)
+        livre.nome = "Recuperação"
+        livre.corrida = CorridaPlano(tipo="recuperacao", duracao_min=RECUPERACAO_MIN, esforco_alvo="1-3")
+        pontos.append(
+            f"Você marcou 7 dias: deixei {DIAS_NOMES[livre.dia]} como recuperação (caminhada leve ou "
+            "mobilidade). Prefere descanso total nesse dia?"
+        )
+    _proteger_treinos_duros(dias, nivel_corrida, maximo_corrida)
+    return PlanoIn(dias=dias), pontos
 
 
 def plano_base(perfil: PerfilIn) -> PlanoIn:

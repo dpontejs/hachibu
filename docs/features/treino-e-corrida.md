@@ -8,7 +8,15 @@
 
 A aba TREINO passa a ter o plano da semana (musculação e corrida juntas) e o registro do que foi feito. O Hachibu monta um **plano base em código** a partir do perfil. Depois o aluno o ajusta conversando com o coach: troca exercícios, muda a divisão, sobe o nível. Toda mudança é validada em código e só vale depois de aprovada. O primeiro usuário é iniciante na corrida e está sem preparo, então a corrida começa alternando corrida e caminhada.
 
-**Princípio:** tudo é personalizável. O plano base nasce das preferências declaradas, e não de um único padrão. O que o formulário não cobre, o coach ajusta pela conversa. O diferencial do Hachibu é esse: um plano que é seu, mais um coach para ajudar a mudá-lo com segurança.
+**Princípio:** tudo é personalizável (ver o princípio em `hachibu.md`). **O plano nasce de uma conversa com o coach**, não de um botão: o plano base em código é o rascunho que o coach usa (`rascunho_plano()` devolve o plano e os pontos em aberto), discute com o aluno e só então propõe (`propor_plano()`, validado e aprovado no card). Os pontos em que o rascunho não seguiu uma preferência viram perguntas do coach, não notas silenciosas.
+
+**Mudança de 2026-11-28 (depois de testar o PR #14):** o plano era gerado direto por um botão, e isso foi trocado pela conversa. Também:
+- **Dois tempos separados:** `minutos_sessao` passa a ser só a musculação, e `minutos_corrida` (novo, opcional) é o tempo da corrida. Um não desconta do outro.
+- **Dia de recuperação:** um tipo de corrida `recuperacao` (caminhada leve ou mobilidade, esforço 1–3, até 40 min). A regra 2 passa a exigir pelo menos 1 dia **sem treino pesado** (descanso ou recuperação). Com 7 dias, o rascunho põe 1 de recuperação, e o coach pergunta se o aluno prefere descanso total.
+- **Até 6 dias de musculação** (superior/inferior repetido 3 vezes). Com "depois da musculação", a corrida vai em todos os dias de musculação pedidos.
+
+Ordem nova dos PRs: (1) plano base, validador e tela da semana **sem botão de gerar**; (2) plano pela conversa (`rascunho_plano`, `propor_plano` e o card com a semana); (3) registro estilo Hevy.
+
 
 ## Fora de escopo
 

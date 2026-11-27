@@ -24,7 +24,8 @@ class CorridaPlano(BaseModel):
     model_config = ConfigDict(extra="forbid")
     # True: o treino vem da semana atual da progressão de iniciante (o plano guarda só a marcação).
     progressao: bool = False
-    tipo: Literal["corrida_caminhada", "leve", "intervalado", "longao"]
+    # recuperacao: caminhada leve ou mobilidade (esforço 1–3); conta como dia sem treino pesado.
+    tipo: Literal["corrida_caminhada", "leve", "intervalado", "longao", "recuperacao"]
     duracao_min: int = Field(ge=5, le=240)
     corre_min: float | None = Field(default=None, gt=0, le=240)
     anda_min: float | None = Field(default=None, ge=0, le=30)
