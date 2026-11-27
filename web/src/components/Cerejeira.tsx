@@ -42,9 +42,14 @@ export default function Cerejeira() {
     let vivo = true;
     const reduz = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 
-    Promise.all([carregar("/sprites/cerejeira.png"), carregar("/sprites/cerejeira-fundo.png")])
-      .then(([arvore, fundoArvore]) => {
-        if (!vivo) return;
+    let observador: ResizeObserver | null = null;
+    let adiado = 0;
+
+    // Monta a cena para o tamanho atual do canvas. Roda de novo ao girar o celular ou redimensionar a janela,
+    // para os pixels continuarem quadrados.
+    const montar = (arvore: HTMLImageElement, fundoArvore: HTMLImageElement) => {
+        cancelAnimationFrame(quadroId);
+        if (!canvas.clientWidth || !canvas.clientHeight) return; // oculto: monta quando aparecer
         const proporcao = canvas.clientWidth / Math.max(canvas.clientHeight, 1);
         // Em tela estreita (celular) a grade cresce até a árvore caber inteira na largura.
         const H = Math.max(ALTURA, Math.ceil((arvore.width + 24) / proporcao));
@@ -166,6 +171,19 @@ export default function Cerejeira() {
           if (!reduz && vivo) quadroId = requestAnimationFrame(quadro);
         };
         quadro();
+    };
+
+    Promise.all([carregar("/sprites/cerejeira.png"), carregar("/sprites/cerejeira-fundo.png")])
+      .then(([arvore, fundoArvore]) => {
+        if (!vivo) return;
+        montar(arvore, fundoArvore);
+        if (typeof ResizeObserver !== "undefined") {
+          observador = new ResizeObserver(() => {
+            window.clearTimeout(adiado);
+            adiado = window.setTimeout(() => vivo && montar(arvore, fundoArvore), 150);
+          });
+          observador.observe(canvas);
+        }
       })
       .catch(() => {
         /* sem os sprites, fica só o fundo escuro */
@@ -174,6 +192,8 @@ export default function Cerejeira() {
     return () => {
       vivo = false;
       cancelAnimationFrame(quadroId);
+      window.clearTimeout(adiado);
+      observador?.disconnect();
     };
   }, []);
 

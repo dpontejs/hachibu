@@ -21,11 +21,14 @@ export default function Shell() {
   const navegar = useNavigate();
   const { pathname } = useLocation();
   const [me, setMe] = useState<Me | null>(null);
+  const [falhou, setFalhou] = useState(false);
+  const [tentativa, setTentativa] = useState(0);
   // Um coach montado por vez: no painel (desktop) ou na rota /coach (celular).
   const desktop = useDesktop();
 
   useEffect(() => {
     let vivo = true;
+    setFalhou(false);
     api
       .meSemRedirecionar()
       .then((m) => {
@@ -34,14 +37,21 @@ export default function Shell() {
         if (!m.perfil_completo && pathname !== "/perfil") navegar("/perfil", { replace: true });
       })
       .catch((e) => {
-        // Visitante sem sessão: a landing apresenta o app (o login fica a um toque de lá).
-        if (vivo && e instanceof ApiError && e.status === 401) navegar("/boas-vindas", { replace: true });
+        if (!vivo) return;
+        if (e instanceof ApiError && e.status === 401) {
+          // Abrindo o app pela raiz: visitante, vê a landing. Num link direto (/comida...), é quem já
+          // tem conta com a sessão expirada: vai direto para o login.
+          navegar(pathname === "/" ? "/boas-vindas" : "/entrar", { replace: true });
+        } else {
+          // Sem rede, servidor reiniciando: mostra o erro com saída, nunca uma tela vazia.
+          setFalhou(true);
+        }
       });
     return () => {
       vivo = false;
     };
-    // Só na montagem: o guarda roda uma vez ao abrir o app.
-  }, []);
+    // Roda ao abrir o app e a cada "tentar de novo".
+  }, [tentativa]);
 
   async function sair() {
     // Mesmo se a chamada falhar, a saída visual acontece; o cookie expira no servidor.
@@ -53,6 +63,17 @@ export default function Shell() {
 
   // Só desenha as telas depois de saber quem é: sem isso, a tela de dentro chamaria a API sem sessão
   // e cairia no login antes de a landing aparecer.
+  if (!me && falhou) {
+    return (
+      <main className="carregando-app falha-app" role="alert">
+        <p className="px">SEM CONEXAO</p>
+        <p>Não deu para falar com o servidor. Confira a internet e tente de novo.</p>
+        <button type="button" className="botao botao--cheio px" onClick={() => setTentativa((n) => n + 1)}>
+          TENTAR DE NOVO
+        </button>
+      </main>
+    );
+  }
   if (!me) return <div className="carregando-app" aria-busy="true" />;
 
   return (

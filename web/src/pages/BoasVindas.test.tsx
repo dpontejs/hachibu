@@ -78,3 +78,39 @@ describe("Shell sem sessão", () => {
     expect(screen.queryByText("HOJE")).not.toBeInTheDocument();
   });
 });
+
+describe("Shell: erros e sessão expirada", () => {
+  function montar(inicio: string) {
+    return render(
+      <MemoryRouter initialEntries={[inicio]}>
+        <Routes>
+          <Route path="/boas-vindas" element={<p>LANDING</p>} />
+          <Route path="/entrar" element={<p>LOGIN</p>} />
+          <Route element={<Shell />}>
+            <Route index element={<p>TELA DO HOJE</p>} />
+            <Route path="comida" element={<p>COMIDA</p>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  it("sessão expirada num link direto leva ao login, não à landing", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => json({ detail: "nao_autenticado" }, 401)));
+    montar("/comida");
+    expect(await screen.findByText("LOGIN")).toBeInTheDocument();
+  });
+
+  it("falha de rede mostra erro com tentar de novo, em vez de tela vazia", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue(json({ email: "a@x.com", perfil_completo: true }));
+    vi.stubGlobal("fetch", fetchMock);
+    montar("/");
+    const botao = await screen.findByRole("button", { name: /tentar de novo/i });
+    botao.click();
+    expect(await screen.findByText("TELA DO HOJE")).toBeInTheDocument();
+  });
+});
+
