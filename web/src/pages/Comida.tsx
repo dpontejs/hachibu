@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { api, ApiError, mensagemDeErro, type Alimento } from "../api";
+import { abrirCoachPorFoto } from "../coach/abrir";
 import { horaEmBrasilia } from "../formato";
+import { Icone } from "../ui";
 
 const ESPERA_MS = 250;
 const MAX_ITENS = 30;
@@ -142,8 +144,16 @@ export default function Comida() {
   return (
     <div className="comida">
       <header className="comida__topo">
-        <div className="rotulo px">COMIDA</div>
-        <h1 className="comida__titulo">Montar refeição</h1>
+        <div className="comida__cabeca">
+          <div>
+            <div className="rotulo px">COMIDA</div>
+            <h1 className="comida__titulo">Montar refeição</h1>
+          </div>
+          <button type="button" className="botao-foto" onClick={() => abrirCoachPorFoto(navegar)}>
+            <Icone nome="camera" tamanho={16} />
+            <span className="px">POR FOTO</span>
+          </button>
+        </div>
         <p className="mudo comida__intro">
           Busque na TACO, a tabela brasileira de alimentos. Você escolhe as gramas; as calorias saem da tabela.
         </p>
