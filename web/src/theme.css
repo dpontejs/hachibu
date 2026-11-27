@@ -2177,10 +2177,6 @@ input[type="number"] {
   justify-content: center;
 }
 
-.landing__kanji-texto {
-  font-family: "DotGothic16", "Hiragino Sans", "Noto Sans JP", sans-serif;
-  color: var(--acento);
-}
 @media (min-width: 760px) {
   .landing__recursos--seis {
     grid-template-columns: repeat(3, 1fr);

@@ -56,6 +56,7 @@ describe("BoasVindas: conteúdo", () => {
     ]);
     expect(screen.getByText(/Adicionar à Tela de Início/)).toBeInTheDocument();
     expect(screen.getByText(/fotos não são guardadas/i)).toBeInTheDocument();
+    expect(screen.queryByText(/um pixel de cada vez/i)).not.toBeInTheDocument();
   });
 });
 

@@ -113,10 +113,6 @@ export default function BoasVindas() {
           <em>Hara hachi bu</em> quer dizer exatamente isso. É uma ideia de equilíbrio, não de restrição: parar
           um pouco antes, todo dia, sem sofrer.
         </p>
-        <p>
-          E o <em>hachi</em> (<span className="landing__kanji-texto" lang="ja">八</span>) é o número 8. Daí a cara de videogame de 8 e 16 bits. Um dia de cada vez, um
-          pixel de cada vez.
-        </p>
       </section>
 
       <section className="landing__secao">
