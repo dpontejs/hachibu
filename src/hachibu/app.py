@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
-from hachibu import alimentos, auth, diario, perfil
+from hachibu import alimentos, auth, diario, memorias, perfil
 from hachibu.coach import rotas as coach_rotas
 from hachibu.config import Settings
 from hachibu.db import connect, migrate
@@ -25,6 +25,7 @@ def create_app(settings: Settings) -> FastAPI:
     app.include_router(diario.router)
     app.include_router(alimentos.router)
     app.include_router(coach_rotas.router)
+    app.include_router(memorias.router)
     app.state.modelo_coach = _modelo_coach(settings)
 
     @app.get("/healthz")
