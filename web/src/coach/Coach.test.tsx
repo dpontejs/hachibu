@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Coach, { CHAVE_THREAD, nomeFerramenta } from "./Coach";
+import { EVENTO_MENSAGEM } from "./abrir";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -651,4 +652,24 @@ describe("Coach", () => {
       expect(screen.getByRole("textbox", { name: /mensagem para o coach/i })).toHaveValue("oi");
     });
   });
+
+  it("abre com a mensagem pedida por outra tela já escrita na caixa (sem enviar)", async () => {
+    const chamadas = mockFetch(() => undefined);
+    render(
+      <MemoryRouter>
+        <Coach mensagemInicial="Quero montar meu plano de treino" />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("textbox", { name: /mensagem para o coach/i })).toHaveValue(
+      "Quero montar meu plano de treino",
+    );
+    expect(chamadas.some((c) => c.init?.method === "POST")).toBe(false);
+  });
+
+  it("no desktop, o pedido de outra tela chega por evento", async () => {
+    renderCoach();
+    window.dispatchEvent(new CustomEvent(EVENTO_MENSAGEM, { detail: "Ajusta meu plano" }));
+    expect(await screen.findByDisplayValue("Ajusta meu plano")).toBeInTheDocument();
+  });
 });
+

@@ -34,6 +34,8 @@ export interface Perfil {
   nivel_corrida?: Nivel | null;
   corrida_quando?: CorridaQuando | null;
   corridas_semana?: number | null;
+  /** Minutos de corrida por sessão, separados dos de musculação (`minutos_sessao`). */
+  minutos_corrida?: number | null;
 }
 
 export type CorridaQuando = "automatico" | "mesmo_dia" | "dias_separados";
@@ -188,7 +190,7 @@ export interface ExercicioDia {
 export interface CorridaDia {
   /** Vem da semana atual da progressão de iniciante. */
   progressao: boolean;
-  tipo: "corrida_caminhada" | "leve" | "intervalado" | "longao";
+  tipo: "corrida_caminhada" | "leve" | "intervalado" | "longao" | "recuperacao";
   duracao_min: number;
   corre_min: number | null;
   anda_min: number | null;

@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { api, ApiError, ConexaoPerdida, mensagemDeErro, Redirecionado, type ConversaCoach, type MensagemCoach, type PendenciaCoach, type RespostaCoach } from "../api";
 import { Icone } from "../ui";
-import { EVENTO_FOTO, gravarThread, lerThread } from "./abrir";
+import { EVENTO_FOTO, EVENTO_MENSAGEM, gravarThread, lerThread } from "./abrir";
 import Aprovacao from "./Aprovacao";
 
 export { CHAVE_THREAD } from "./abrir";
@@ -213,7 +213,14 @@ const FORA_MS = 20_000; // voltou do segundo plano e o stream está mudo há mai
  * O coach: o mesmo componente no painel do desktop e em /coach no celular.
  * A conversa vive no servidor; aqui só fica o `thread_id` (localStorage).
  */
-export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }) {
+export default function Coach({
+  abrirCamera = false,
+  mensagemInicial,
+}: {
+  abrirCamera?: boolean;
+  /** Pedido de outra tela (ex.: "montar meu plano"): fica escrito na caixa, sem enviar. */
+  mensagemInicial?: string;
+}) {
   const [threadId, setThreadId] = useState<string | null>(lerThread);
   const [mensagens, setMensagens] = useState<MensagemCoach[]>([]);
   const [pendente, setPendente] = useState<PendenciaCoach | null>(null);
@@ -221,7 +228,7 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
   const [envio, setEnvio] = useState<Envio | null>(null);
   const [decidindo, setDecidindo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [texto, setTexto] = useState("");
+  const [texto, setTexto] = useState(mensagemInicial ?? "");
   const [foto, setFoto] = useState<File | null>(null);
   const [previa, setPrevia] = useState<string | null>(null);
   const [previaQuebrada, setPreviaQuebrada] = useState(false);
@@ -401,9 +408,20 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
       window.clearTimeout(t);
       t = window.setTimeout(() => setChamado(false), 900);
     }
+    function escrever(ev: Event) {
+      const pedido = (ev as CustomEvent<string>).detail;
+      if (typeof pedido !== "string") return;
+      setTexto(pedido);
+      campo.current?.focus();
+      setChamado(true);
+      window.clearTimeout(t);
+      t = window.setTimeout(() => setChamado(false), 900);
+    }
     window.addEventListener(EVENTO_FOTO, abrir);
+    window.addEventListener(EVENTO_MENSAGEM, escrever);
     return () => {
       window.removeEventListener(EVENTO_FOTO, abrir);
+      window.removeEventListener(EVENTO_MENSAGEM, escrever);
       window.clearTimeout(t);
     };
   }, []);

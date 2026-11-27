@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 export const CHAVE_THREAD = "hachibu.coach.thread";
 /** Disparado no desktop, onde o coach já está montado no painel lateral. */
 export const EVENTO_FOTO = "hachibu:coach-foto";
+/** Desktop: outra tela pede para abrir o coach com uma mensagem já escrita (`detail` = texto). */
+export const EVENTO_MENSAGEM = "hachibu:coach-mensagem";
 
 const CONSULTA_DESKTOP = "(min-width: 1024px)";
 
@@ -35,6 +37,15 @@ export function useDesktop(): boolean {
 export function abrirCoachPorFoto(navegar: (para: string) => void): void {
   if (ehDesktop()) window.dispatchEvent(new Event(EVENTO_FOTO));
   else navegar("/coach?foto=1");
+}
+
+/**
+ * Abre o coach com a mensagem já escrita na caixa, sem enviar (o aluno revisa e manda). No desktop vai para
+ * o painel; no celular, para /coach.
+ */
+export function abrirCoachCom(texto: string, navegar: (para: string) => void): void {
+  if (ehDesktop()) window.dispatchEvent(new CustomEvent(EVENTO_MENSAGEM, { detail: texto }));
+  else navegar(`/coach?msg=${encodeURIComponent(texto)}`);
 }
 
 export function lerThread(): string | null {

@@ -138,9 +138,11 @@ export function TelaCoach() {
   const [params, setParams] = useSearchParams();
   // Lido uma vez: "?foto=1" vem do botão "por foto" da tela de comida.
   const [comCamera] = useState(() => params.get("foto") === "1");
+  // "?msg=..." vem de outra tela que pede ao coach (ex.: montar o plano de treino).
+  const [mensagem] = useState(() => params.get("msg") ?? undefined);
 
   useEffect(() => {
-    if (params.has("foto")) setParams({}, { replace: true });
+    if (params.has("foto") || params.has("msg")) setParams({}, { replace: true });
     // Só limpa a URL na montagem.
   }, []);
 
@@ -155,7 +157,7 @@ export function TelaCoach() {
   }
   return (
     <div className="tela-coach">
-      <Coach abrirCamera={comCamera} />
+      <Coach abrirCamera={comCamera} mensagemInicial={mensagem} />
     </div>
   );
 }

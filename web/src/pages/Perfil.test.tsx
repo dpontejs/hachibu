@@ -45,8 +45,14 @@ describe("Perfil", () => {
     );
     await user.click(await screen.findByRole("radio", { name: "Depois da musculação" }));
     await user.click(screen.getByRole("radiogroup", { name: "Corridas por semana" }).querySelector('input[value="4"]')!);
+    await user.type(screen.getByRole("spinbutton", { name: /minutos de corrida/i }), "35");
     await user.click(screen.getByRole("button", { name: /salvar e recalcular/i }));
     await waitFor(() => expect(corpos).toHaveLength(1));
-    expect(corpos[0]).toMatchObject({ corrida_quando: "mesmo_dia", corridas_semana: 4, nivel_corrida: null });
+    expect(corpos[0]).toMatchObject({
+      corrida_quando: "mesmo_dia",
+      corridas_semana: 4,
+      nivel_corrida: null,
+      minutos_corrida: 35,
+    });
   });
 });

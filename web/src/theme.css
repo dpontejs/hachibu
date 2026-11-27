@@ -2497,6 +2497,12 @@ input[type="number"] {
   font-size: 14px;
 }
 .treino__notas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+.treino__notas ul {
   margin: 0;
   padding-left: 18px;
   font-size: 14px;

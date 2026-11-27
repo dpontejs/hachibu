@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { api, mensagemDeErro, type CorridaDia, type DiaTreino, type PlanoTreino } from "../api";
+import { abrirCoachCom } from "../coach/abrir";
+
+const PEDIDO_MONTAR = "Quero montar meu plano de treino e corrida.";
+const PEDIDO_AJUSTAR = "Meu plano de treino não cabe mais no meu perfil. Me ajuda a ajustar?";
+const PEDIDO_PONTOS = "Vamos conversar sobre os pontos em aberto do meu plano de treino?";
 
 const DIAS = ["SEG", "TER", "QUA", "QUI", "SEX", "SAB", "DOM"];
 const SEMANAS_PROGRESSAO = 9;
@@ -16,6 +21,7 @@ export function descreverCorrida(c: CorridaDia): string {
     if (!c.anda_min) return `${minutos(c.corre_min)} correndo sem parar`;
     return `${minutos(c.corre_min)} correndo + ${minutos(c.anda_min)} andando × ${c.repeticoes ?? 1}`;
   }
+  if (c.tipo === "recuperacao") return `Recuperação · ${minutos(c.duracao_min)} de caminhada leve ou mobilidade`;
   const nome = { leve: "Leve", intervalado: "Intervalado", longao: "Longão", corrida_caminhada: "Corrida" }[c.tipo];
   return `${nome} · ${minutos(c.duracao_min)}`;
 }
@@ -60,7 +66,8 @@ function Exercicios({ d }: { d: DiaTreino }) {
 export default function Treino() {
   const [plano, setPlano] = useState<PlanoTreino | null | undefined>(undefined);
   const [erro, setErro] = useState<string | null>(null);
-  const [gerando, setGerando] = useState(false);
+  const navegar = useNavigate();
+  const pedir = (texto: string) => abrirCoachCom(texto, navegar);
   const [hojeIdx, setHojeIdx] = useState(diaDeHoje);
 
   const carregar = useCallback(async () => {
@@ -83,21 +90,6 @@ export default function Treino() {
     return () => document.removeEventListener("visibilitychange", atualizar);
   }, []);
 
-  async function gerar(substituir: boolean) {
-    if (substituir && !window.confirm("Gerar um plano base novo a partir do seu perfil? O plano atual fica no histórico."))
-      return;
-    setGerando(true);
-    setErro(null);
-    try {
-      await api.gerarPlano(substituir);
-      await carregar();
-    } catch (e) {
-      setErro(mensagemDeErro(e));
-    } finally {
-      setGerando(false);
-    }
-  }
-
   if (plano === undefined && !erro) return <p className="carregando px">CARREGANDO</p>;
 
   if (plano === null)
@@ -106,15 +98,16 @@ export default function Treino() {
         <h1 className="rotulo px">TREINO</h1>
         <section className="treino__vazio">
           <p>
-            O Hachibu monta um plano base de musculação e corrida a partir do seu perfil: dias disponíveis, tempo por
-            sessão, equipamento e nível. Depois você ajusta tudo com o coach.
+            O seu plano de musculação e corrida nasce de uma conversa com o coach. Ele parte do seu perfil, das suas
+            preferências e do que já sabe de você, explica cada escolha e pergunta o que estiver em aberto. Nada vale
+            antes de você aprovar.
           </p>
           <p className="mudo">
-            Confira antes as preferências de corrida no <Link to="/perfil">Perfil</Link> (quando correr e quantas vezes
-            por semana).
+            Vale conferir antes o <Link to="/perfil">Perfil</Link>: dias, minutos de musculação e de corrida, e quando
+            correr.
           </p>
-          <button type="button" className="botao" onClick={() => void gerar(false)} disabled={gerando}>
-            {gerando ? "MONTANDO…" : "MONTAR MEU PLANO"}
+          <button type="button" className="botao" onClick={() => pedir(PEDIDO_MONTAR)}>
+            MONTAR COM O COACH
           </button>
         </section>
         {erro && (
@@ -160,24 +153,28 @@ export default function Treino() {
               <li key={a}>{a}</li>
             ))}
           </ul>
-          <button type="button" className="botao" onClick={() => void gerar(true)} disabled={gerando}>
-            GERAR NOVO PLANO BASE
+          <button type="button" className="botao" onClick={() => pedir(PEDIDO_AJUSTAR)}>
+            AJUSTAR COM O COACH
           </button>
-          <p className="mudo">Ou peça ao coach para adaptar o plano atual.</p>
         </section>
       )}
 
       {plano.notas.length > 0 && (
-        <ul className="treino__notas mudo" aria-label="Notas do plano">
-          {plano.notas.map((n) => (
-            <li key={n}>{n}</li>
-          ))}
-        </ul>
+        <section className="treino__notas" aria-label="Pontos para conversar">
+          <ul className="mudo">
+            {plano.notas.map((n) => (
+              <li key={n}>{n}</li>
+            ))}
+          </ul>
+          <button type="button" className="botao" onClick={() => pedir(PEDIDO_PONTOS)}>
+            CONVERSAR COM O COACH
+          </button>
+        </section>
       )}
 
       {plano.tem_condicoes && (
         <p className="treino__condicoes mudo">
-          Você tem condições físicas registradas. O plano base não as leva em conta: peça ao coach para adaptar.
+          Você tem condições físicas registradas: confira com o coach se o plano as respeita.
         </p>
       )}
 
