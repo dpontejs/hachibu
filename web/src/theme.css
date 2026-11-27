@@ -2,6 +2,13 @@
    Press Start 2P em rótulos, VT323 em números, Inter no texto. */
 
 @font-face {
+  /* Recorte só com 腹八分 (1 KB): o kanji em pixel ao lado do nome. */
+  font-family: "DotGothic16";
+  src: url("/fonts/dotgothic16-hachibu.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
   font-family: "Press Start 2P";
   src: url("/fonts/press-start-2p-latin-400-normal.woff2") format("woff2");
   font-weight: 400;
@@ -1954,4 +1961,247 @@ input[type="number"] {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* ---------- Landing (boas-vindas) ---------- */
+.landing {
+  min-height: 100svh;
+  background: var(--bg);
+  color: var(--texto);
+}
+.landing__heroi {
+  position: relative;
+  height: min(100svh, 640px);
+  overflow: hidden;
+}
+.cerejeira {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+.landing__texto {
+  position: absolute;
+  z-index: 1;
+  left: clamp(24px, 6vw, 88px);
+  top: 50%;
+  transform: translateY(-50%);
+  max-width: 42%;
+}
+.landing__logo {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.2em;
+  flex-wrap: wrap;
+  font-size: clamp(24px, 3.4vw, 40px);
+  font-weight: 400;
+}
+.landing__nome {
+  color: #fff;
+  line-height: 1;
+  letter-spacing: 1px;
+  text-shadow: 3px 3px 0 #0b0c10;
+}
+.landing__kanji-logo {
+  font-family: "DotGothic16", "Hiragino Sans", "Noto Sans JP", sans-serif;
+  /* A Press Start 2P ocupa o em inteiro em maiúsculas; o kanji tem respiro embaixo:
+     centraliza na caixa e sobe um pouco para as alturas visuais baterem. */
+  font-size: 0.98em;
+  line-height: 1;
+  transform: translateY(-0.14em);
+  color: var(--acento);
+  letter-spacing: 2px;
+  text-shadow: 3px 3px 0 #0b0c10;
+}
+.landing__lema {
+  margin: 18px 0 0;
+  font-size: 17px;
+  line-height: 1.55;
+  color: #c3c7d2;
+}
+.landing__ctas {
+  display: flex;
+  gap: 10px;
+  margin-top: 24px;
+  flex-wrap: wrap;
+}
+.landing__ctas .botao {
+  text-decoration: none;
+  font-size: 9px;
+  padding: 13px 16px;
+  border-radius: var(--raio-p);
+  border: 1px solid var(--acento);
+  color: var(--acento);
+  background: rgba(18, 20, 26, 0.7);
+}
+.landing__ctas .botao--cheio {
+  background: var(--acento);
+  color: var(--bg);
+}
+.landing__secao {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 56px clamp(20px, 5vw, 40px) 8px;
+}
+.landing__recursos {
+  list-style: none;
+  padding: 0;
+  margin: 18px 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+}
+.landing__recurso {
+  background: var(--card);
+  border-radius: var(--raio);
+  padding: 18px;
+}
+.landing__recurso h3 {
+  font-size: 9px;
+  color: var(--acento);
+  margin: 0 0 10px;
+  line-height: 1.6;
+}
+.landing__recurso p,
+.landing__nomeacao p {
+  margin: 0;
+  color: #c3c7d2;
+  line-height: 1.6;
+}
+.landing__nomeacao p + p {
+  margin-top: 12px;
+}
+.landing__kanji {
+  font-family: "DotGothic16", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans CJK JP", "Noto Sans JP", "Yu Gothic",
+    "Meiryo", sans-serif;
+  font-size: 44px;
+  color: var(--acento) !important;
+  margin: 14px 0 16px !important;
+  letter-spacing: 6px;
+}
+.landing__rodape {
+  max-width: 980px;
+  margin: 48px auto 0;
+  padding: 18px clamp(20px, 5vw, 40px) 32px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--mudo);
+  border-top: 1px solid var(--linha);
+}
+.landing__rodape a {
+  color: var(--mudo);
+}
+@media (max-width: 700px) {
+  .landing__texto {
+    top: auto;
+    bottom: 40px;
+    transform: none;
+    max-width: none;
+    right: 24px;
+  }
+}
+
+.carregando-app {
+  min-height: 100svh;
+  background: var(--bg);
+}
+
+.landing__passos {
+  list-style: none;
+  padding: 0;
+  margin: 18px 0 0;
+  display: grid;
+  gap: 14px;
+}
+.landing__passo {
+  display: flex;
+  gap: 16px;
+  background: var(--card);
+  border-radius: var(--raio);
+  padding: 18px;
+}
+.landing__numero {
+  font-size: 40px;
+  line-height: 1;
+  color: var(--acento);
+  min-width: 26px;
+}
+.landing__passo h3 {
+  margin: 2px 0 8px;
+  font-size: 17px;
+}
+.landing__passo p,
+.landing__colunas p,
+.landing__final p,
+.landing__lista li {
+  margin: 0;
+  color: #c3c7d2;
+  line-height: 1.6;
+}
+.landing__recursos--breve .landing__recurso {
+  background: transparent;
+  border: 1px dashed var(--trilho);
+}
+.landing__recursos--breve .landing__recurso h3 {
+  color: var(--mudo);
+}
+.landing__colunas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 32px;
+}
+.landing__colunas p {
+  margin-top: 14px;
+}
+.landing__lista {
+  margin: 14px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 10px;
+}
+.landing__lista strong {
+  color: var(--texto);
+}
+.landing__final {
+  text-align: center;
+}
+.landing__final p {
+  margin-top: 14px;
+}
+.landing__final .landing__ctas {
+  justify-content: center;
+}
+
+@media (min-width: 760px) {
+  .landing__recursos--seis {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.falha-app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+  color: var(--texto);
+}
+.falha-app .px {
+  font-size: 11px;
+  color: var(--acento);
+}
+.falha-app .botao {
+  font-size: 9px;
+  padding: 13px 16px;
+  border-radius: var(--raio-p);
+  border: 1px solid var(--acento);
+  background: var(--acento);
+  color: var(--bg);
 }
