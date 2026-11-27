@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
+import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router";
 import { api, type Me } from "../api";
+import Coach from "../coach/Coach";
+import { useDesktop } from "../coach/abrir";
 import { Icone, Marca, type NomeIcone } from "../ui";
 
 const TELAS: { para: string; nome: string; curto: string; icone: NomeIcone }[] = [
@@ -19,6 +21,8 @@ export default function Shell() {
   const navegar = useNavigate();
   const { pathname } = useLocation();
   const [me, setMe] = useState<Me | null>(null);
+  // Um coach montado por vez: no painel (desktop) ou na rota /coach (celular).
+  const desktop = useDesktop();
 
   useEffect(() => {
     let vivo = true;
@@ -47,7 +51,7 @@ export default function Shell() {
   const noCoach = pathname === "/coach";
 
   return (
-    <div className="shell">
+    <div className={noCoach ? "shell shell--coach" : "shell"}>
       <aside className="lateral" aria-label="Navegação principal">
         <Link to="/" className="lateral__marca">
           <Marca tamanho={26} />
@@ -78,9 +82,11 @@ export default function Shell() {
         <Outlet />
       </main>
 
-      <aside className="coach-painel" aria-label="Coach">
-        <PainelCoach />
-      </aside>
+      {desktop && (
+        <aside className="coach-painel" aria-label="Coach">
+          <Coach />
+        </aside>
+      )}
 
       {!noCoach && (
         <Link to="/coach" className="fab px" aria-label="Abrir o coach">
@@ -100,34 +106,30 @@ export default function Shell() {
   );
 }
 
-export function PainelCoach() {
-  return (
-    <div className="coach">
-      <div className="coach__topo">
-        <span className="rotulo px">COACH</span>
-        <span className="coach__status vt">offline</span>
-      </div>
-      <div className="coach__corpo">
-        <div className="coach__balao">
-          <p>O coach chega na próxima etapa</p>
-          <p className="mudo">
-            Ele vai ler seu dia, registrar refeições por foto e ajustar o treino, sempre pedindo sua aprovação antes de
-            mudar o plano.
-          </p>
-        </div>
-      </div>
-      <div className="coach__entrada" aria-hidden="true">
-        <span className="mudo">Pergunte ao coach…</span>
-        <span className="px coach__enviar">▶</span>
-      </div>
-    </div>
-  );
-}
-
+/** /coach no celular; no desktop o coach já está no painel ao lado. */
 export function TelaCoach() {
+  const desktop = useDesktop();
+  const [params, setParams] = useSearchParams();
+  // Lido uma vez: "?foto=1" vem do botão "por foto" da tela de comida.
+  const [comCamera] = useState(() => params.get("foto") === "1");
+
+  useEffect(() => {
+    if (params.has("foto")) setParams({}, { replace: true });
+    // Só limpa a URL na montagem.
+  }, []);
+
+  if (desktop) {
+    return (
+      <div className="em-breve">
+        <div className="rotulo px">COACH</div>
+        <h1 className="em-breve__titulo">O coach fica no painel ao lado</h1>
+        <p className="mudo">No computador a conversa acompanha todas as telas, na coluna da direita.</p>
+      </div>
+    );
+  }
   return (
     <div className="tela-coach">
-      <PainelCoach />
+      <Coach abrirCamera={comCamera} />
     </div>
   );
 }
