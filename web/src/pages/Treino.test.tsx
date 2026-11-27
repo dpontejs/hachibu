@@ -59,12 +59,18 @@ function Destino() {
   return <p data-testid="destino">{new URLSearchParams(search).get("msg")}</p>;
 }
 
+function SessaoDestino() {
+  const { pathname } = useLocation();
+  return <p data-testid="sessao">{pathname.split("/").pop()}</p>;
+}
+
 function renderTreino() {
   return render(
     <MemoryRouter initialEntries={["/treino"]}>
       <Routes>
         <Route path="/treino" element={<Treino />} />
         <Route path="/coach" element={<Destino />} />
+        <Route path="/treino/sessao/:id" element={<SessaoDestino />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -187,6 +193,44 @@ describe("Treino", () => {
     renderTreino();
     const hoje = await screen.findByRole("region", { name: /hoje/i });
     expect(within(hoje).getByText(/bicicleta leve · 20 min/i)).toBeInTheDocument();
+  });
+
+  it("iniciar o treino de hoje abre a sessão", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: new Date("2026-11-30T10:00:00") }); // segunda
+    const chamadas = servidor((u, init) => {
+      if (u === "/api/plano") return json(PLANO);
+      if (u === "/api/sessoes/aberta") return json({ detail: "sem_sessao_aberta" }, 404);
+      if (u.startsWith("/api/sessoes?")) return json([]);
+      if (u === "/api/sessoes" && init?.method === "POST") return json({ id: 9 }, 200);
+    });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderTreino();
+    await user.click(await screen.findByRole("button", { name: /iniciar treino/i }));
+    expect(JSON.parse(String(chamadas.find((c) => c.init?.method === "POST")!.init!.body))).toEqual({ plano_dia: 0 });
+    expect(await screen.findByTestId("sessao")).toHaveTextContent("9");
+  });
+
+  it("com uma sessão aberta, oferece continuar", async () => {
+    servidor((u) => {
+      if (u === "/api/plano") return json(PLANO);
+      if (u === "/api/sessoes/aberta") return json({ id: 4, nome: "Superior A" });
+      if (u.startsWith("/api/sessoes?")) return json([]);
+    });
+    renderTreino();
+    expect(await screen.findByRole("button", { name: /continuar treino/i })).toBeInTheDocument();
+    expect(screen.getByText(/em andamento: superior a/i)).toBeInTheDocument();
+  });
+
+  it("dia com treino finalizado aparece como feito", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: new Date("2026-11-30T10:00:00") }); // segunda
+    servidor((u) => {
+      if (u === "/api/plano") return json(PLANO);
+      if (u === "/api/sessoes/aberta") return json({ detail: "x" }, 404);
+      if (u.startsWith("/api/sessoes?")) return json([{ id: 1, data: "2026-11-30", nome: "Corpo inteiro A", plano_dia: 0, local: null, series: 12 }]);
+    });
+    renderTreino();
+    const hoje = await screen.findByRole("region", { name: /hoje/i });
+    expect(await within(hoje).findByText(/feito/i)).toBeInTheDocument();
   });
 });
 

@@ -226,6 +226,58 @@ export interface PlanoTreino {
   tem_condicoes: boolean;
 }
 
+// ---------- registro da musculação ----------
+
+export interface SerieFeita {
+  ordem: number;
+  carga_kg: number | null;
+  reps: number;
+}
+
+export interface UltimaVez {
+  data: string;
+  local: string | null;
+  series: { carga_kg: number | null; reps: number }[];
+}
+
+export interface ExercicioSessao {
+  ordem: number;
+  exercicio_id: string;
+  nome: string;
+  series_planejadas: number;
+  reps_min: number;
+  reps_max: number;
+  descanso_s: number;
+  feitas: SerieFeita[];
+  ultima: UltimaVez | null;
+}
+
+export interface SessaoTreino {
+  id: number;
+  data: string;
+  nome: string;
+  plano_dia: number | null;
+  local: string | null;
+  iniciada_em: string;
+  finalizada_em: string | null;
+  exercicios: ExercicioSessao[];
+}
+
+export interface ResumoSessao {
+  duracao_min: number;
+  series: number;
+  volume_kg: number;
+}
+
+export interface SessaoFeita {
+  id: number;
+  data: string;
+  nome: string;
+  plano_dia: number | null;
+  local: string | null;
+  series: number;
+}
+
 export type TipoMemoria = "restricao" | "condicao" | "gosto";
 
 /** O que o coach sabe do aluno entre conversas. */
@@ -509,6 +561,34 @@ export const api = {
   },
   /** Recomeçar: tira o plano ativo (a versão fica no histórico). */
   apagarPlano: () => request<unknown>("DELETE", "/plano"),
+  iniciarSessao: (corpo: { plano_dia?: number; local?: string }) =>
+    request<SessaoTreino>("POST", "/sessoes", corpo),
+  /** `null` quando não há sessão aberta (404). */
+  async sessaoAberta(): Promise<SessaoTreino | null> {
+    try {
+      return await request<SessaoTreino>("GET", "/sessoes/aberta");
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) return null;
+      throw e;
+    }
+  },
+  sessao: (id: number) => request<SessaoTreino>("GET", `/sessoes/${id}`),
+  sessoesFeitas: (de: string, ate: string) =>
+    request<SessaoFeita[]>("GET", `/sessoes?de=${encodeURIComponent(de)}&ate=${encodeURIComponent(ate)}`),
+  marcarSerie: (id: number, corpo: { ordem_exercicio: number; ordem: number; carga_kg: number | null; reps: number }) =>
+    request<SessaoTreino>("PUT", `/sessoes/${id}/series`, corpo),
+  desmarcarSerie: (id: number, ordemExercicio: number, ordem: number) =>
+    request<SessaoTreino>("DELETE", `/sessoes/${id}/series/${ordemExercicio}/${ordem}`),
+  mudarLocal: (id: number, local: string | null) => request<SessaoTreino>("PATCH", `/sessoes/${id}`, { local }),
+  acrescentarExercicio: (id: number, exercicioId: string) =>
+    request<SessaoTreino>("POST", `/sessoes/${id}/exercicios`, { exercicio_id: exercicioId }),
+  trocarExercicio: (id: number, ordem: number, exercicioId: string) =>
+    request<SessaoTreino>("PUT", `/sessoes/${id}/exercicios/${ordem}`, { exercicio_id: exercicioId }),
+  finalizarSessao: (id: number) => request<ResumoSessao>("POST", `/sessoes/${id}/finalizar`),
+  descartarSessao: (id: number) => request<unknown>("DELETE", `/sessoes/${id}`),
+  locais: () => request<string[]>("GET", "/locais"),
+  buscarExercicios: (q: string) =>
+    request<{ id: string; nome: string; grupo: string }[]>("GET", `/exercicios?q=${encodeURIComponent(q)}`),
   coachConversas: () => request<{ conversas: ConversaCoach[] }>("GET", "/coach/conversas"),
   /** `null` quando a thread não existe ou não é do usuário (404): vira conversa nova. */
   async coachHistorico(threadId: string): Promise<RespostaCoach | null> {
@@ -532,6 +612,8 @@ export function mensagemDeErro(e: unknown): string | null {
     if (e.status === 503 && e.detail === "coach_indisponivel") return MSG_COACH_FORA;
     if (e.status === 409 && e.detail === "aprovacao_pendente")
       return "Responda o pedido acima (aprovar ou recusar) antes de mandar outra mensagem.";
+    if (e.detail === "sessao_aberta") return "Você já tem um treino em andamento. Continue ou finalize ele.";
+    if (e.detail === "sessao_finalizada") return "Esse treino já foi finalizado.";
     if (e.detail === "memoria_repetida") return "Isso já está na lista.";
     if (e.detail === "limite_de_memorias") return "A lista desse tipo está cheia. Apague algo que não vale mais.";
     if (e.detail === "memoria_inexistente") return "Essa memória não existe mais.";
