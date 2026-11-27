@@ -5,11 +5,12 @@ continua de onde parou. A "última vez" de um exercício prefere o mesmo local (
 academia) e nunca conta a sessão em andamento.
 """
 
+import sqlite3
 from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Request, Response
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from hachibu.auth import UserId
 from hachibu.db import Db
@@ -48,6 +49,12 @@ class ExercicioIn(BaseModel):
     reps_max: int = Field(default=12, ge=1, le=30)
     descanso_s: int = Field(default=90, ge=15, le=600)
 
+    @model_validator(mode="after")
+    def _faixa(self):
+        if self.reps_max < self.reps_min:
+            raise ValueError("reps_max menor que reps_min")
+        return self
+
 
 class TrocaIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -78,13 +85,14 @@ def ultima_vez(
     """Séries da última sessão com este exercício: do mesmo local, se houver; senão, de qualquer local."""
 
     def buscar(mesmo_local: bool):
-        filtro = " AND s.local = ?" if mesmo_local else ""
+        filtro = " AND lower(trim(s.local)) = lower(trim(?))" if mesmo_local else ""
         args: list = [user_id, exercicio_id, exceto or -1]
         if mesmo_local:
             args.append(local)
         return db.execute(
             "SELECT s.id, s.data, s.local FROM series x JOIN sessoes s ON s.id = x.sessao_id "
-            f"WHERE s.user_id = ? AND x.exercicio_id = ? AND s.id != ?{filtro} "
+            "WHERE s.user_id = ? AND x.exercicio_id = ? AND s.id != ? AND s.finalizada_em IS NOT NULL"
+            f"{filtro} "
             "ORDER BY s.iniciada_em DESC LIMIT 1",
             args,
         ).fetchone()
@@ -147,11 +155,6 @@ def _inserir_exercicio(db, sessao_id: int, ordem: int, e: ExercicioIn) -> None:
 @router.post("/sessoes", status_code=201)
 def iniciar(dados: SessaoIn, request: Request, user_id: UserId, db: Db) -> dict:
     """Começa a sessão do dia do plano (copia os exercícios) ou um treino livre (vazio)."""
-    if db.execute(
-        "SELECT 1 FROM sessoes WHERE user_id = ? AND tipo = 'musculacao' AND finalizada_em IS NULL",
-        (user_id,),
-    ).fetchone():
-        raise HTTPException(409, "sessao_aberta")
     exercicios, nome, plano_id = [], "Treino livre", None
     if dados.plano_dia is not None:
         ativo = plano_ativo(db, user_id)
@@ -159,10 +162,18 @@ def iniciar(dados: SessaoIn, request: Request, user_id: UserId, db: Db) -> dict:
             raise HTTPException(404, "plano_inexistente")
         meta, plano = ativo
         dia = plano.dias[dados.plano_dia]
+        if not dia.exercicios:
+            raise HTTPException(422, "dia_sem_musculacao")
         exercicios, nome, plano_id = dia.exercicios, dia.nome, meta["id"]
     data = hoje(request.app.state.settings.app_tz).isoformat()
     db.execute("BEGIN IMMEDIATE")
     try:
+        # Dentro da transação: dois "iniciar" ao mesmo tempo (rede instável na academia) não abrem duas.
+        if db.execute(
+            "SELECT 1 FROM sessoes WHERE user_id = ? AND tipo = 'musculacao' AND finalizada_em IS NULL",
+            (user_id,),
+        ).fetchone():
+            raise HTTPException(409, "sessao_aberta")
         cur = db.execute(
             "INSERT INTO sessoes (user_id, tipo, data, nome, plano_id, plano_dia, local, iniciada_em) "
             "VALUES (?, 'musculacao', ?, ?, ?, ?, ?, ?)",
@@ -182,7 +193,10 @@ def iniciar(dados: SessaoIn, request: Request, user_id: UserId, db: Db) -> dict:
                 ),
             )
         db.execute("COMMIT")
-    except Exception:
+    except sqlite3.IntegrityError:
+        db.execute("ROLLBACK")
+        raise HTTPException(409, "sessao_aberta") from None
+    except BaseException:
         db.execute("ROLLBACK")
         raise
     return montar(db, user_id, _sessao(db, user_id, cur.lastrowid))
@@ -255,12 +269,18 @@ def mudar_local(id_: int, dados: LocalIn, user_id: UserId, db: Db) -> dict:
 def acrescentar_exercicio(id_: int, dados: ExercicioIn, user_id: UserId, db: Db) -> dict:
     sessao = _sessao(db, user_id, id_, escrita=True)
     _exercicio_valido(dados.exercicio_id)
-    proxima = db.execute(
-        "SELECT COALESCE(MAX(ordem) + 1, 0) AS n FROM sessao_exercicios WHERE sessao_id = ?", (id_,)
-    ).fetchone()["n"]
-    if proxima > 40:
-        raise HTTPException(422, "exercicios_demais")
-    _inserir_exercicio(db, id_, proxima, dados)
+    db.execute("BEGIN IMMEDIATE")
+    try:
+        proxima = db.execute(
+            "SELECT COALESCE(MAX(ordem) + 1, 0) AS n FROM sessao_exercicios WHERE sessao_id = ?", (id_,)
+        ).fetchone()["n"]
+        if proxima > 40:
+            raise HTTPException(422, "exercicios_demais")
+        _inserir_exercicio(db, id_, proxima, dados)
+        db.execute("COMMIT")
+    except BaseException:
+        db.execute("ROLLBACK")
+        raise
     return montar(db, user_id, sessao)
 
 
@@ -269,6 +289,11 @@ def trocar_exercicio(id_: int, ordem: int, dados: TrocaIn, user_id: UserId, db: 
     """Troca só neste dia: o plano não muda (para mudar o plano, é com o coach)."""
     sessao = _sessao(db, user_id, id_, escrita=True)
     _exercicio_valido(dados.exercicio_id)
+    atual = db.execute(
+        "SELECT exercicio_id FROM sessao_exercicios WHERE sessao_id = ? AND ordem = ?", (id_, ordem)
+    ).fetchone()
+    if atual is not None and atual["exercicio_id"] == dados.exercicio_id:
+        return montar(db, user_id, sessao)  # o mesmo exercício: nada muda, nenhuma série se perde
     cur = db.execute(
         "UPDATE sessao_exercicios SET exercicio_id = ? WHERE sessao_id = ? AND ordem = ?",
         (dados.exercicio_id, id_, ordem),

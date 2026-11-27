@@ -165,3 +165,60 @@ def test_sessao_de_outro_usuario_404(com_plano, make_user):
     assert r.status_code == 404
     assert outro.post(f"/api/sessoes/{s['id']}/finalizar").status_code == 404
     assert outro.get("/api/exercicios/supino_reto/ultima").json() is None
+
+
+# ---------- achados da revisão ----------
+
+
+def test_dois_iniciar_ao_mesmo_tempo_um_vira_409(com_plano):
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(4) as pool:
+        codigos = sorted(
+            pool.map(lambda _: com_plano.post("/api/sessoes", json={"plano_dia": 0}).status_code, range(4))
+        )
+    assert codigos == [201, 409, 409, 409]
+
+
+def test_ultima_vez_nao_conta_sessao_em_andamento(com_plano):
+    s = iniciar(com_plano, plano_dia=0)
+    serie(com_plano, s["id"], 0, 0, 40, 10)
+    assert com_plano.get("/api/exercicios/supino_reto/ultima").json() is None
+
+
+def test_local_ignora_maiusculas_e_espacos(com_plano):
+    a = iniciar(com_plano, plano_dia=0, local="Smart Fit")
+    serie(com_plano, a["id"], 0, 0, 30, 10)
+    com_plano.post(f"/api/sessoes/{a['id']}/finalizar")
+    b = iniciar(com_plano, plano_dia=0, local="Outra")
+    serie(com_plano, b["id"], 0, 0, 24, 10)
+    com_plano.post(f"/api/sessoes/{b['id']}/finalizar")
+    ultima = com_plano.get("/api/exercicios/supino_reto/ultima", params={"local": "  smart fit "}).json()
+    assert ultima["series"][0]["carga_kg"] == 30
+
+
+def test_trocar_pelo_mesmo_exercicio_nao_apaga_as_series(com_plano):
+    s = iniciar(com_plano, plano_dia=0)
+    serie(com_plano, s["id"], 0, 0, 40, 10)
+    r = com_plano.put(f"/api/sessoes/{s['id']}/exercicios/0", json={"exercicio_id": "supino_reto"})
+    assert r.json()["exercicios"][0]["feitas"] == [{"ordem": 0, "carga_kg": 40, "reps": 10}]
+
+
+def test_exercicio_com_faixa_invertida_422(com_plano):
+    s = iniciar(com_plano)
+    r = com_plano.post(
+        f"/api/sessoes/{s['id']}/exercicios",
+        json={"exercicio_id": "rosca_direta", "reps_min": 12, "reps_max": 8},
+    )
+    assert r.status_code == 422
+
+
+def test_dia_sem_musculacao_nao_vira_sessao(settings, aluno):
+    from hachibu.treino.modelos import DiaPlano, PlanoIn
+
+    plano = PlanoIn(dias=[DiaPlano(dia=i, nome="Descanso") for i in range(7)])
+    db = connect(settings.db_path)
+    gravar_plano(db, 1, plano, "coach")
+    db.close()
+    r = aluno.post("/api/sessoes", json={"plano_dia": 2})
+    assert (r.status_code, r.json()["detail"]) == (422, "dia_sem_musculacao")
