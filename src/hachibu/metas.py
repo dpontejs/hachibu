@@ -30,6 +30,10 @@ class PerfilIn(BaseModel):
     meta_profissional_proteina_g: int | None = Field(default=None, ge=0, le=500)
     meta_profissional_carbo_g: int | None = Field(default=None, ge=0, le=1000)
     meta_profissional_gordura_g: int | None = Field(default=None, ge=0, le=300)
+    # Corrida (opcionais): o nível pode ser diferente do da musculação. Vazio = iniciante, automático, 3.
+    nivel_corrida: Literal["iniciante", "intermediario", "avancado"] | None = None
+    corrida_quando: Literal["automatico", "mesmo_dia", "dias_separados"] | None = None
+    corridas_semana: int | None = Field(default=None, ge=1, le=7)
 
 
 class Metas(BaseModel):
