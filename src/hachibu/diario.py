@@ -68,38 +68,37 @@ RefeicaoIn = Annotated[
 ]
 
 
-def _itens_da_taco(db, itens: list[ItemTacoIn]) -> list[dict]:
+class AlimentoInexistente(ValueError):
+    def __init__(self, alimento_id: int):
+        super().__init__(f"alimento {alimento_id} não existe na TACO")
+        self.alimento_id = alimento_id
+
+
+def itens_da_taco(db, itens: list[tuple[int, float]]) -> list[dict]:
+    """Calcula cada item (alimento_id, gramas) a partir da TACO. Os macros nunca vêm de fora."""
     calculados = []
-    for item in itens:
+    for alimento_id, gramas in itens:
         alimento = db.execute(
-            "SELECT id, nome, kcal, proteina_g, carbo_g, gordura_g FROM foods WHERE id = ?",
-            (item.alimento_id,),
+            "SELECT id, nome, kcal, proteina_g, carbo_g, gordura_g FROM foods WHERE id = ?", (alimento_id,)
         ).fetchone()
         if alimento is None:
-            raise HTTPException(422, "alimento_inexistente")
-        fator = item.gramas / 100
+            raise AlimentoInexistente(alimento_id)
+        fator = gramas / 100
         calculados.append(
-            {"food_id": alimento["id"], "nome": alimento["nome"], "gramas": item.gramas}
+            {"food_id": alimento["id"], "nome": alimento["nome"], "gramas": gramas}
             | {m: alimento[m] * fator for m in MACROS}
         )
     return calculados
 
 
-@router.post("/refeicoes", status_code=201)
-def registrar_refeicao(dados: RefeicaoIn, user_id: UserId, request: Request, db: Db) -> dict:
-    if isinstance(dados, RefeicaoTacoIn):
-        itens = _itens_da_taco(db, dados.itens)
-        totais = {m: sum(i[m] for i in itens) for m in MACROS}
-        fonte = "taco"
-    else:
-        itens = []
-        totais = {m: getattr(dados, m) for m in MACROS}
-        fonte = "manual"
+def gravar_refeicao(
+    db, user_id: int, dia: str, criado_em: str, nome: str, itens: list[dict], totais: dict, fonte: str
+) -> int:
     db.execute("BEGIN")
     cur = db.execute(
         "INSERT INTO meals (user_id, data, criado_em, nome, kcal, proteina_g, carbo_g, gordura_g, fonte) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (user_id, _hoje(request), _agora(request).isoformat(), dados.nome, *totais.values(), fonte),
+        (user_id, dia, criado_em, nome, *(totais[m] for m in MACROS), fonte),
     )
     db.executemany(
         "INSERT INTO meal_items (meal_id, food_id, nome, gramas, kcal, proteina_g, carbo_g, gordura_g) "
@@ -107,24 +106,54 @@ def registrar_refeicao(dados: RefeicaoIn, user_id: UserId, request: Request, db:
         [(cur.lastrowid, i["food_id"], i["nome"], i["gramas"], *(i[m] for m in MACROS)) for i in itens],
     )
     db.execute("COMMIT")
-    return {"id": cur.lastrowid}
+    return cur.lastrowid
+
+
+def gravar_agua(db, user_id: int, dia: str, criado_em: str, ml: int) -> int:
+    cur = db.execute(
+        "INSERT INTO water_logs (user_id, data, criado_em, ml) VALUES (?, ?, ?, ?)",
+        (user_id, dia, criado_em, ml),
+    )
+    return cur.lastrowid
+
+
+@router.post("/refeicoes", status_code=201)
+def registrar_refeicao(dados: RefeicaoIn, user_id: UserId, request: Request, db: Db) -> dict:
+    if isinstance(dados, RefeicaoTacoIn):
+        try:
+            itens = itens_da_taco(db, [(i.alimento_id, i.gramas) for i in dados.itens])
+        except AlimentoInexistente:
+            raise HTTPException(422, "alimento_inexistente") from None
+        totais = {m: sum(i[m] for i in itens) for m in MACROS}
+        fonte = "taco"
+    else:
+        itens = []
+        totais = {m: getattr(dados, m) for m in MACROS}
+        fonte = "manual"
+    meal_id = gravar_refeicao(
+        db, user_id, _hoje(request), _agora(request).isoformat(), dados.nome, itens, totais, fonte
+    )
+    return {"id": meal_id}
 
 
 @router.post("/agua", status_code=201)
 def registrar_agua(dados: AguaIn, user_id: UserId, request: Request, db: Db) -> dict:
-    cur = db.execute(
-        "INSERT INTO water_logs (user_id, data, criado_em, ml) VALUES (?, ?, ?, ?)",
-        (user_id, _hoje(request), _agora(request).isoformat(), dados.ml),
-    )
-    return {"id": cur.lastrowid}
+    return {"id": gravar_agua(db, user_id, _hoje(request), _agora(request).isoformat(), dados.ml)}
 
 
 @router.get("/hoje")
 def obter_hoje(user_id: UserId, request: Request, db: Db) -> dict:
+    resumo = resumo_do_dia(db, user_id, _hoje(request))
+    if resumo is None:
+        raise HTTPException(409, "perfil_incompleto")
+    return resumo
+
+
+def resumo_do_dia(db, user_id: int, dia: str) -> dict | None:
+    """Metas, consumido, água e refeições do dia; None se o usuário ainda não tem perfil."""
     metas = ler_metas(db, user_id)
     if metas is None:
-        raise HTTPException(409, "perfil_incompleto")
-    dia = _hoje(request)
+        return None
     refeicoes = db.execute(
         "SELECT id, nome, kcal, proteina_g, carbo_g, gordura_g, criado_em FROM meals "
         "WHERE user_id = ? AND data = ? ORDER BY criado_em, id",
