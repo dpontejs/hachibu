@@ -166,26 +166,27 @@ def aplicar_ajuste_metas(
 
 
 def lembrar(db, user_id: int, tipo: str, texto: str) -> dict:
-    texto = " ".join(texto.split())
-    if not 2 <= len(texto) <= 200:
-        raise ErroFerramenta("o texto da memória precisa ter de 2 a 200 caracteres.")
+    try:
+        texto = memorias._validar_texto(texto)
+    except ValueError as e:
+        raise ErroFerramenta(str(e)) from None
     try:
         memoria, criada = memorias.criar(db, user_id, tipo, texto, "coach")
-    except memorias.LimiteDeMemorias:
+    except memorias.LimiteDeMemorias as e:
         raise ErroFerramenta(
-            f"o aluno já tem {memorias.LIMITE} memórias. Peça para ele revisar a lista na tela Perfil."
+            f"o aluno já tem {memorias.LIMITES[e.tipo]} memórias desse tipo. "
+            "Peça para ele revisar a lista na tela Perfil."
         ) from None
     return {"lembrado": memoria.model_dump(), "ja_existia": not criada}
 
 
 def esquecer_gosto(db, user_id: int, id_: int) -> dict:
     memoria = memorias.apagar(db, user_id, id_, so_gostos=True)
-    if memoria is None:
-        existe = any(m.id == id_ for m in memorias.listar(db, user_id))
-        if existe:
-            raise ErroFerramenta(
-                "restrições e condições físicas só o próprio aluno remove, na tela Perfil. "
-                "Diga isso a ele e continue respeitando a restrição."
-            )
-        raise ErroFerramenta(f"não existe memória #{id_}. Confira os ids no bloco do aluno.")
-    return {"esquecido": memoria.model_dump()}
+    if memoria is not None:
+        return {"esquecido": memoria.model_dump()}
+    if memorias._ler(db, user_id, id_) is not None:
+        raise ErroFerramenta(
+            "restrições e condições físicas só o próprio aluno remove, na tela Perfil. "
+            "Diga isso a ele e continue respeitando a restrição."
+        )
+    raise ErroFerramenta(f"não existe memória #{id_}. Confira os ids no bloco do aluno.")

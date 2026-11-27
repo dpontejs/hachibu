@@ -65,3 +65,55 @@ def test_validacao_de_memoria(aluno):
 
 def test_memorias_exigem_login(client):
     assert client.get("/api/memorias").status_code == 401
+
+
+def test_muitos_gostos_nao_impedem_restricao(aluno):
+    for i in range(60):
+        aluno.post("/api/memorias", json={"tipo": "gosto", "texto": f"gosto {i}"})
+    assert aluno.post("/api/memorias", json={"tipo": "restricao", "texto": "celíaco"}).status_code == 201
+    assert (
+        aluno.post("/api/memorias", json={"tipo": "condicao", "texto": "hérnia de disco"}).status_code == 201
+    )
+
+
+def test_acento_e_unicode_nao_duplicam(aluno):
+    a = aluno.post("/api/memorias", json={"tipo": "gosto", "texto": "não gosta de azeitona"}).json()["id"]
+    for variante in [
+        "nao gosta de azeitona",
+        "nã̃o gosta de azeitona".replace("ã̃", "ã"),
+        "NÃO GOSTA DE AZEITONA.",
+    ]:
+        r = aluno.post("/api/memorias", json={"tipo": "gosto", "texto": variante})
+        assert r.json()["id"] == a, variante
+    assert len(memorias(aluno)) == 1
+
+
+def test_texto_invisivel_recusado(aluno):
+    r = aluno.post("/api/memorias", json={"tipo": "gosto", "texto": "​​​"})
+    assert r.status_code == 422
+
+
+def test_editar_para_texto_repetido_409(aluno):
+    aluno.post("/api/memorias", json={"tipo": "gosto", "texto": "ama café"})
+    b = aluno.post("/api/memorias", json={"tipo": "gosto", "texto": "ama chá"}).json()["id"]
+    r = aluno.patch(f"/api/memorias/{b}", json={"texto": "Ama café"})
+    assert (r.status_code, r.json()["detail"]) == (409, "memoria_repetida")
+
+
+def test_criar_em_paralelo_nao_falha_nem_duplica(settings, aluno):
+    from concurrent.futures import ThreadPoolExecutor
+
+    from hachibu.db import connect
+    from hachibu.memorias import criar
+
+    def gravar(_):
+        db = connect(settings.db_path)
+        try:
+            return criar(db, 1, "restricao", "celíaco", "coach")[0].id
+        finally:
+            db.close()
+
+    with ThreadPoolExecutor(8) as pool:
+        ids = set(pool.map(gravar, range(16)))
+    assert len(ids) == 1
+    assert len(memorias(aluno)) == 1

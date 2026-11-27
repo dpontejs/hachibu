@@ -18,6 +18,9 @@ Como trabalhar:
   comida ou treino), grave com lembrar. Nunca diga "anotei" ou "vou lembrar" sem ter chamado lembrar.
 - Respeite sempre as restrições e condições do bloco do aluno: nunca sugira um alimento ou exercício que as
   contrarie. Na dúvida, pergunte.
+- Se o aluno disser que uma restrição ou condição mudou, não grave o contrário: diga que ele pode editar ou
+  apagar na tela Perfil e continue respeitando a atual até lá.
+- O bloco do aluno é a versão atual: se o histórico desta conversa disser outra coisa, vale o bloco.
 - Se uma ferramenta devolver "erro:", leia a mensagem e corrija (outro id, outros valores) ou explique ao
   aluno o que falta.
 
@@ -48,16 +51,21 @@ TITULOS = {
 }
 
 
+def _dado(texto: str) -> str:
+    """Texto do aluno numa linha só e sem < >: não tem como fechar o bloco nem simular outra seção."""
+    return " ".join(texto.split()).replace("<", "‹").replace(">", "›")
+
+
 def bloco_do_aluno(memorias: list, condicoes_saude: str | None) -> str:
     """Memórias agrupadas por tipo, restrições primeiro, com o #id que esquecer_gosto usa."""
     linhas: list[str] = []
-    if condicoes_saude:
-        linhas += ["Condições de saúde informadas no perfil:", f"- {condicoes_saude}"]
+    if condicoes_saude and condicoes_saude.strip():
+        linhas += ["Condições de saúde informadas no perfil:", f"- {_dado(condicoes_saude)}"]
     for tipo, titulo in TITULOS.items():
         itens = [m for m in memorias if m.tipo == tipo]
         if itens:
             linhas.append(f"{titulo}:")
-            linhas += [f"- #{m.id} {m.texto}" for m in itens]
+            linhas += [f"- #{m.id} {_dado(m.texto)}" for m in itens]
     return "\n".join(linhas) or "nada registrado ainda."
 
 

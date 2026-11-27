@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { api, mensagemDeErro, type Memoria, type TipoMemoria } from "../api";
+import { api, ApiError, mensagemDeErro, type Memoria, type TipoMemoria } from "../api";
 
 const GRUPOS: { tipo: TipoMemoria; rotulo: string; nome: string; vazio: string }[] = [
   { tipo: "restricao", rotulo: "RESTRICOES", nome: "Restrições", vazio: "Nada ainda. Ex.: celíaco, alergia a amendoim." },
@@ -24,7 +24,13 @@ function Item({
 
   async function salvar(ev: FormEvent) {
     ev.preventDefault();
+    if (texto.trim().length < 2) return;
     if (await onSalvar(texto)) setEditando(false);
+  }
+
+  function cancelar() {
+    setTexto(memoria.texto);
+    setEditando(false);
   }
 
   if (editando)
@@ -33,7 +39,9 @@ function Item({
         <form className="memoria__edicao" onSubmit={salvar}>
           <input
             aria-label="Editar memória"
+            autoFocus
             value={texto}
+            onKeyDown={(e) => e.key === "Escape" && cancelar()}
             minLength={2}
             maxLength={200}
             required
@@ -42,14 +50,7 @@ function Item({
           <button type="submit" className="memoria__botao px">
             SALVAR
           </button>
-          <button
-            type="button"
-            className="memoria__botao px"
-            onClick={() => {
-              setTexto(memoria.texto);
-              setEditando(false);
-            }}
-          >
+          <button type="button" className="memoria__botao px" onClick={cancelar}>
             CANCELAR
           </button>
         </form>
@@ -65,7 +66,10 @@ function Item({
           type="button"
           className="memoria__botao px"
           aria-label={`Editar ${memoria.texto}`}
-          onClick={() => setEditando(true)}
+          onClick={() => {
+            setTexto(memoria.texto);
+            setEditando(true);
+          }}
         >
           EDITAR
         </button>
@@ -84,21 +88,39 @@ export default function Memorias() {
   const [tipo, setTipo] = useState<TipoMemoria>("gosto");
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [tentativa, setTentativa] = useState(0);
+  const [falhouCarregar, setFalhouCarregar] = useState(false);
 
   useEffect(() => {
     let vivo = true;
     api
       .memorias()
-      .then((r) => vivo && setMemorias(r.memorias))
-      .catch((e) => vivo && setErro(mensagemDeErro(e)));
+      .then((r) => {
+        if (!vivo) return;
+        setMemorias(r.memorias);
+        setFalhouCarregar(false);
+        setErro(null);
+      })
+      .catch((e) => {
+        if (!vivo) return;
+        setFalhouCarregar(true);
+        setErro(mensagemDeErro(e));
+      });
     return () => {
       vivo = false;
     };
-  }, []);
+  }, [tentativa]);
+
+  /** 404: a memória sumiu (outra aba, ou o coach esqueceu um gosto): tira da tela também. */
+  function sumiu(e: unknown, id: number): boolean {
+    if (!(e instanceof ApiError) || e.status !== 404) return false;
+    setMemorias((atual) => (atual ?? []).filter((m) => m.id !== id));
+    return true;
+  }
 
   async function adicionar(ev: FormEvent) {
     ev.preventDefault();
-    if (texto.trim().length < 2 || enviando) return;
+    if (texto.trim().length < 2 || enviando || memorias === null) return;
     setEnviando(true);
     setErro(null);
     try {
@@ -120,7 +142,7 @@ export default function Memorias() {
       return true;
     } catch (e) {
       setErro(mensagemDeErro(e));
-      return false;
+      return sumiu(e, id);
     }
   }
 
@@ -132,7 +154,7 @@ export default function Memorias() {
       await api.apagarMemoria(m.id);
       setMemorias((atual) => (atual ?? []).filter((x) => x.id !== m.id));
     } catch (e) {
-      setErro(mensagemDeErro(e));
+      if (!sumiu(e, m.id)) setErro(mensagemDeErro(e));
     }
   }
 
@@ -146,7 +168,16 @@ export default function Memorias() {
         apaga sozinho: só você, aqui.
       </p>
 
-      {memorias === null && !erro && <p className="carregando px">CARREGANDO</p>}
+      {memorias === null && !falhouCarregar && (
+        <p className="carregando px" role="status">
+          CARREGANDO
+        </p>
+      )}
+      {memorias === null && falhouCarregar && (
+        <button type="button" className="botao" onClick={() => setTentativa((t) => t + 1)}>
+          TENTAR DE NOVO
+        </button>
+      )}
 
       {memorias &&
         GRUPOS.map((g) => {
@@ -168,7 +199,7 @@ export default function Memorias() {
         })}
 
       <form className="memorias__nova" onSubmit={adicionar}>
-        <select aria-label="Tipo" value={tipo} onChange={(e) => setTipo(e.target.value as TipoMemoria)}>
+        <select aria-label="Tipo" value={tipo} disabled={memorias === null} onChange={(e) => setTipo(e.target.value as TipoMemoria)}>
           <option value="restricao">Restrição</option>
           <option value="condicao">Condição física</option>
           <option value="gosto">Gosto</option>
@@ -178,9 +209,14 @@ export default function Memorias() {
           placeholder="ex.: intolerante à lactose"
           value={texto}
           maxLength={200}
+          disabled={memorias === null}
           onChange={(e) => setTexto(e.target.value)}
         />
-        <button type="submit" className="botao" disabled={enviando || texto.trim().length < 2}>
+        <button
+          type="submit"
+          className="botao"
+          disabled={enviando || memorias === null || texto.trim().length < 2}
+        >
           ADICIONAR
         </button>
       </form>

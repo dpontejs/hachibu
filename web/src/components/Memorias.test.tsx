@@ -113,4 +113,44 @@ describe("Memorias", () => {
     expect(await screen.findByText("detesta azeitona preta")).toBeInTheDocument();
     expect(chamadas.find((c) => c.method === "PATCH")?.body).toEqual({ texto: "detesta azeitona preta" });
   });
+
+  it("se a lista não carregar, não deixa adicionar e oferece tentar de novo", async () => {
+    let falhar = true;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => (falhar ? json({ detail: "x" }, 500) : json({ memorias: BASE }))),
+    );
+    const user = userEvent.setup();
+    render(<Memorias />);
+    const tentar = await screen.findByRole("button", { name: /tentar de novo/i });
+    expect(screen.getByRole("textbox", { name: /o que o coach deve saber/i })).toBeDisabled();
+    falhar = false;
+    await user.click(tentar);
+    expect(await screen.findByText("celíaco")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /o que o coach deve saber/i })).toBeEnabled();
+  });
+
+  it("apagar algo que já não existe tira da lista", async () => {
+    servidor();
+    const user = userEvent.setup();
+    render(<Memorias />);
+    await screen.findByText("não gosta de azeitona");
+    vi.stubGlobal("fetch", vi.fn(async () => json({ detail: "memoria_inexistente" }, 404)));
+    await user.click(screen.getByRole("button", { name: /apagar não gosta de azeitona/i }));
+    await waitFor(() => expect(screen.queryByText("não gosta de azeitona")).not.toBeInTheDocument());
+  });
+
+  it("memória repetida ao editar mostra mensagem em português", async () => {
+    servidor();
+    const user = userEvent.setup();
+    render(<Memorias />);
+    await user.click(await screen.findByRole("button", { name: /editar não gosta de azeitona/i }));
+    vi.stubGlobal("fetch", vi.fn(async () => json({ detail: "memoria_repetida" }, 409)));
+    const campo = screen.getByRole("textbox", { name: /editar memória/i });
+    expect(campo).toHaveFocus();
+    await user.clear(campo);
+    await user.type(campo, "celíaco");
+    await user.click(screen.getByRole("button", { name: /salvar/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/já está na lista/i);
+  });
 });

@@ -5,22 +5,39 @@ o coach grava pelas tools, mas só pode apagar gostos (restrição e condição 
 """
 
 import sqlite3
+import unicodedata
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Response
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import AfterValidator, BaseModel, ConfigDict
 
 from hachibu.auth import UserId
 from hachibu.db import Db
 
 Tipo = Literal["restricao", "condicao", "gosto"]
 Origem = Literal["coach", "aluno"]
-Texto = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=200)]
-LIMITE = 60
+# Teto por tipo: muitos gostos nunca impedem gravar uma restrição ou condição.
+LIMITES = {"restricao": 30, "condicao": 30, "gosto": 60}
 ORDEM = {"restricao": 0, "condicao": 1, "gosto": 2}
 
 router = APIRouter(prefix="/api/memorias")
+
+
+def limpar(texto: str) -> str:
+    """Tira caracteres invisíveis (formatação Unicode), une acentos (NFC) e colapsa espaços e quebras."""
+    texto = "".join(c for c in unicodedata.normalize("NFC", texto) if unicodedata.category(c) != "Cf")
+    return " ".join(texto.split())
+
+
+def _validar_texto(texto: str) -> str:
+    texto = limpar(texto)
+    if not 2 <= len(texto) <= 200 or not any(c.isalnum() for c in texto):
+        raise ValueError("a memória precisa ter de 2 a 200 caracteres, com letras ou números")
+    return texto
+
+
+Texto = Annotated[str, AfterValidator(_validar_texto)]
 
 
 class MemoriaIn(BaseModel):
@@ -43,7 +60,9 @@ class MemoriaOut(BaseModel):
 
 
 class LimiteDeMemorias(Exception):
-    pass
+    def __init__(self, tipo: str):
+        super().__init__(tipo)
+        self.tipo = tipo
 
 
 class MemoriaRepetida(Exception):
@@ -51,7 +70,9 @@ class MemoriaRepetida(Exception):
 
 
 def normalizar(texto: str) -> str:
-    return " ".join(texto.lower().split())
+    """Chave de unicidade: sem acento, sem caixa, sem pontuação final ("Não gosta." = "nao gosta")."""
+    sem_acento = "".join(c for c in unicodedata.normalize("NFKD", texto) if not unicodedata.combining(c))
+    return " ".join(sem_acento.casefold().split()).rstrip(" .!;,")
 
 
 def _ler(db, user_id: int, id_: int) -> MemoriaOut | None:
@@ -70,27 +91,40 @@ def listar(db, user_id: int) -> list[MemoriaOut]:
 
 
 def criar(db, user_id: int, tipo: str, texto: str, origem: str) -> tuple[MemoriaOut, bool]:
-    """Devolve (memória, criada?). Repetida (mesmo tipo e texto normalizado) devolve a existente."""
-    texto = " ".join(texto.split())
-    existente = db.execute(
-        "SELECT id FROM memorias WHERE user_id = ? AND tipo = ? AND texto_normalizado = ?",
-        (user_id, tipo, normalizar(texto)),
-    ).fetchone()
-    if existente:
-        return _ler(db, user_id, existente["id"]), False
-    total = db.execute("SELECT COUNT(*) AS n FROM memorias WHERE user_id = ?", (user_id,)).fetchone()["n"]
-    if total >= LIMITE:
-        raise LimiteDeMemorias
-    cur = db.execute(
-        "INSERT INTO memorias (user_id, tipo, texto, texto_normalizado, origem, criado_em) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (user_id, tipo, texto, normalizar(texto), origem, datetime.now(UTC).isoformat()),
-    )
+    """Devolve (memória, criada?). Repetida (mesmo tipo e texto normalizado) devolve a existente.
+
+    Numa transação IMMEDIATE: o Gemini pode pedir o mesmo lembrar duas vezes em paralelo.
+    """
+    texto = limpar(texto)
+    chave = normalizar(texto)
+    db.execute("BEGIN IMMEDIATE")
+    try:
+        existente = db.execute(
+            "SELECT id FROM memorias WHERE user_id = ? AND tipo = ? AND texto_normalizado = ?",
+            (user_id, tipo, chave),
+        ).fetchone()
+        if existente:
+            db.execute("COMMIT")
+            return _ler(db, user_id, existente["id"]), False
+        total = db.execute(
+            "SELECT COUNT(*) AS n FROM memorias WHERE user_id = ? AND tipo = ?", (user_id, tipo)
+        ).fetchone()["n"]
+        if total >= LIMITES[tipo]:
+            raise LimiteDeMemorias(tipo)
+        cur = db.execute(
+            "INSERT INTO memorias (user_id, tipo, texto, texto_normalizado, origem, criado_em) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (user_id, tipo, texto, chave, origem, datetime.now(UTC).isoformat()),
+        )
+        db.execute("COMMIT")
+    except BaseException:
+        db.execute("ROLLBACK")
+        raise
     return _ler(db, user_id, cur.lastrowid), True
 
 
 def editar(db, user_id: int, id_: int, texto: str) -> MemoriaOut | None:
-    texto = " ".join(texto.split())
+    texto = limpar(texto)
     try:
         cur = db.execute(
             "UPDATE memorias SET texto = ?, texto_normalizado = ? WHERE id = ? AND user_id = ?",
@@ -103,11 +137,13 @@ def editar(db, user_id: int, id_: int, texto: str) -> MemoriaOut | None:
 
 def apagar(db, user_id: int, id_: int, so_gostos: bool = False) -> MemoriaOut | None:
     """Apaga e devolve a memória apagada; None se não existe (ou não é do usuário, ou não é gosto)."""
-    memoria = _ler(db, user_id, id_)
-    if memoria is None or (so_gostos and memoria.tipo != "gosto"):
-        return None
-    db.execute("DELETE FROM memorias WHERE id = ? AND user_id = ?", (id_, user_id))
-    return memoria
+    filtro = " AND tipo = 'gosto'" if so_gostos else ""
+    row = db.execute(
+        f"DELETE FROM memorias WHERE id = ? AND user_id = ?{filtro} "
+        "RETURNING id, tipo, texto, origem, criado_em",
+        (id_, user_id),
+    ).fetchone()
+    return MemoriaOut(**dict(row)) if row else None
 
 
 @router.get("")

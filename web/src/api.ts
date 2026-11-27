@@ -368,7 +368,10 @@ export function mensagemDeErro(e: unknown): string | null {
     if (e.status === 503 && e.detail === "coach_indisponivel") return MSG_COACH_FORA;
     if (e.status === 409 && e.detail === "aprovacao_pendente")
       return "Responda o pedido acima (aprovar ou recusar) antes de mandar outra mensagem.";
-    if (e.status === 422) return typeof e.detail === "string" ? e.detail : "Confira os campos destacados.";
+    if (e.detail === "memoria_repetida") return "Isso já está na lista.";
+    if (e.detail === "limite_de_memorias") return "A lista desse tipo está cheia. Apague algo que não vale mais.";
+    if (e.detail === "memoria_inexistente") return "Essa memória não existe mais.";
+    if (e.status === 422) return typeof e.detail === "string" ? e.detail : "Confira os campos.";
     if (e.status === 429) return "Muitas tentativas. Espere alguns minutos.";
     if (e.status >= 500) return "O servidor tropeçou. Tente de novo.";
     return typeof e.detail === "string" ? e.detail : e.message;
