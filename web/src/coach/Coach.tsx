@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
-import { api, ApiError, mensagemDeErro, type ConversaCoach, type MensagemCoach, type PendenciaCoach, type RespostaCoach } from "../api";
+import { api, ApiError, ConexaoPerdida, mensagemDeErro, type ConversaCoach, type MensagemCoach, type PendenciaCoach, type RespostaCoach } from "../api";
 import { Icone } from "../ui";
 import { EVENTO_FOTO, gravarThread, lerThread } from "./abrir";
 import Aprovacao from "./Aprovacao";
@@ -10,6 +10,40 @@ export const MENSAGEM_FOTO = "Registra essa refeição";
 const LIMITE_TEXTO = 2000;
 const LIMITE_FOTO = 5 * 1024 * 1024;
 const LADO_MAX_FOTO = 1600;
+
+/** O que o coach está fazendo, pela ferramenta que ele acabou de pedir (passos reais, não enfeite). */
+const FRASES: Record<string, string> = {
+  ler_perfil: "Lendo seu perfil…",
+  ler_diagnostico: "Olhando seu diagnóstico…",
+  saldo_do_dia: "Conferindo seu dia…",
+  buscar_alimento_taco: "Procurando na tabela TACO…",
+  registrar_refeicao: "Registrando a refeição…",
+  registrar_agua: "Registrando a água…",
+  ajustar_metas: "Preparando a proposta de meta…",
+  analisar_foto_refeicao: "Olhando a foto do prato…",
+  lembrar: "Anotando…",
+  esquecer_gosto: "Atualizando suas preferências…",
+  "skill:nutricao": "Consultando o guia de nutrição…",
+  "skill:musculacao": "Consultando o guia de musculação…",
+  "skill:corrida": "Consultando o guia de corrida…",
+};
+
+export function frasePasso(ferramenta: string | null): string {
+  if (!ferramenta) return "pensando…";
+  return FRASES[ferramenta] ?? "Trabalhando nisso…";
+}
+
+const DEMORA_MS = 15_000;
+const INTERVALO_RECUPERAR_MS = 3_000;
+const LIMITE_RECUPERAR_MS = 3 * 60_000;
+
+const esperar = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
+
+/** Id da conversa nova, escolhido aqui: se a resposta se perder, o app sabe qual conversa buscar. */
+function novoId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 const SUGESTOES = ["Como está meu dia?", "O que janto para bater a proteína?", "Monta um treino de 30 min"];
 
@@ -169,6 +203,14 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
   const [previaQuebrada, setPreviaQuebrada] = useState(false);
   const [dicaCamera, setDicaCamera] = useState(abrirCamera);
   const [chamado, setChamado] = useState(false);
+  /** Última ferramenta pedida pelo coach e quando; `agora` anda de segundo em segundo durante a espera. */
+  const [passo, setPasso] = useState<string | null>(null);
+  const [passoEm, setPassoEm] = useState(0);
+  const [agora, setAgora] = useState(0);
+  /** A resposta se perdeu no caminho (rede, app em segundo plano): esperando pelo histórico. */
+  const [aguardando, setAguardando] = useState(false);
+  const abortar = useRef<AbortController | null>(null);
+  const escondidoEm = useRef<number | null>(null);
   /** `null`: painel na conversa; lista: painel mostrando as conversas anteriores. */
   const [conversas, setConversas] = useState<ConversaCoach[] | null>(null);
   const [listando, setListando] = useState(false);
@@ -188,13 +230,59 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
     setPendente(r.pendente);
   }, []);
 
+  /** Consulta o histórico até o servidor terminar a resposta (ou desistir em 3 min). */
+  const recuperar = useCallback(
+    async (id: string, acabouDeConsultar = false) => {
+      const minha = ++geracao.current;
+      const vivo = () => geracao.current === minha;
+      setAguardando(true);
+      setPassoEm(Date.now());
+      const limite = Date.now() + LIMITE_RECUPERAR_MS;
+      if (acabouDeConsultar) await esperar(INTERVALO_RECUPERAR_MS);
+      while (vivo()) {
+        try {
+          const r = await api.coachHistorico(id);
+          if (!vivo()) return;
+          if (!r) {
+            // O pedido nem chegou ao servidor: segue como conversa nova.
+            gravarThread(null);
+            setThreadId(null);
+            setAguardando(false);
+            setErro("A mensagem não chegou ao coach. Tente de novo.");
+            return;
+          }
+          if (!r.processando) {
+            aplicar(r);
+            setAguardando(false);
+            return;
+          }
+          if (r.mensagens.length) setMensagens(r.mensagens);
+        } catch {
+          // Ainda sem rede: tenta de novo no próximo ciclo.
+        }
+        if (Date.now() > limite) {
+          setAguardando(false);
+          setErro("O coach está demorando demais. Abra a conversa de novo daqui a pouco.");
+          return;
+        }
+        await esperar(INTERVALO_RECUPERAR_MS);
+      }
+    },
+    [aplicar],
+  );
+
   const recarregar = useCallback(
     async (id: string, vivo: () => boolean = () => true) => {
       try {
         const r = await api.coachHistorico(id);
         if (!vivo()) return;
-        if (r) aplicar(r);
-        else {
+        if (r) {
+          aplicar(r);
+          if (r.processando) {
+            setCarregando(false);
+            void recuperar(id, true);
+          }
+        } else {
           // Thread apagada ou de outra conta: segue como conversa nova.
           gravarThread(null);
           setThreadId(null);
@@ -207,8 +295,33 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
         if (vivo()) setCarregando(false);
       }
     },
-    [aplicar],
+    [aplicar, recuperar],
   );
+
+  // Durante a espera, o relógio anda para o aviso de passo demorado.
+  const esperando = envio !== null || aguardando;
+  useEffect(() => {
+    if (!esperando) return;
+    setAgora(Date.now());
+    const t = window.setInterval(() => setAgora(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [esperando]);
+
+  // App voltou do segundo plano no meio de uma resposta: o iOS pode ter matado a conexão sem avisar.
+  // Corta o stream e passa a buscar pelo histórico.
+  useEffect(() => {
+    function mudou() {
+      if (document.visibilityState === "hidden") {
+        escondidoEm.current = Date.now();
+        return;
+      }
+      const fora = escondidoEm.current ? Date.now() - escondidoEm.current : 0;
+      escondidoEm.current = null;
+      if (fora > 3000) abortar.current?.abort();
+    }
+    document.addEventListener("visibilitychange", mudou);
+    return () => document.removeEventListener("visibilitychange", mudou);
+  }, []);
 
   useEffect(() => {
     const id = lerThread();
@@ -291,7 +404,7 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
   async function enviar(sugestao?: string) {
     const digitado = texto;
     const mensagem = (sugestao ?? digitado).trim().slice(0, LIMITE_TEXTO) || (foto ? MENSAGEM_FOTO : "");
-    if (!mensagem || ocupado || bloqueado || listando) return;
+    if (!mensagem || ocupado || bloqueado || listando || aguardando) return;
     const fotoEnviada = foto;
     const previaEnviada = previa;
     setEnvio({ texto: mensagem, previa: previaEnviada });
@@ -300,17 +413,43 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
     if (!sugestao) setTexto("");
     setFoto(null);
     setPrevia(null);
+    const nova = !threadId;
+    const id = threadId ?? novoId();
+    if (nova) {
+      setThreadId(id);
+      gravarThread(id);
+    }
+    setPasso(null);
+    setPassoEm(Date.now());
+    const controle = new AbortController();
+    abortar.current = controle;
     try {
-      aplicar(await api.coachEnviar(mensagem, fotoEnviada, threadId));
+      const aoPasso = (f: string) => {
+        setPasso(f);
+        setPassoEm(Date.now());
+      };
+      aplicar(await api.coachEnviar(mensagem, fotoEnviada, id, aoPasso, controle.signal));
       soltarPrevia(previaEnviada);
     } catch (e) {
-      setErro(mensagemDeErro(e));
-      // Nada se perde: texto e foto voltam para a caixa.
-      if (!sugestao) setTexto(digitado);
-      setFoto(fotoEnviada);
-      setPrevia(previaEnviada);
+      if (e instanceof ConexaoPerdida) {
+        // O servidor segue trabalhando: a resposta vem pelo histórico.
+        soltarPrevia(previaEnviada);
+        void recuperar(id);
+      } else {
+        setErro(mensagemDeErro(e));
+        // Nada se perde: texto e foto voltam para a caixa.
+        if (!sugestao) setTexto(digitado);
+        setFoto(fotoEnviada);
+        setPrevia(previaEnviada);
+        if (nova) {
+          gravarThread(null);
+          setThreadId(null);
+        }
+      }
     } finally {
+      abortar.current = null;
       setEnvio(null);
+      setPasso(null);
     }
   }
 
@@ -335,6 +474,7 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
   function novaConversa() {
     if (ocupado) return;
     geracao.current++;
+    setAguardando(false);
     gravarThread(null);
     setThreadId(null);
     setMensagens([]);
@@ -365,6 +505,7 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
     if (id === threadId) return; // já é a conversa na tela (ou a que está carregando)
     const minha = ++geracao.current;
     const vivo = () => geracao.current === minha;
+    setAguardando(false);
     const antes = { mensagens, pendente, carregando };
     setMensagens([]);
     setPendente(null);
@@ -405,7 +546,24 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
 
   const vazio = mensagens.length === 0 && !envio && !carregando;
   // Sem esperar o histórico carregar, uma mensagem poderia furar uma aprovação pendente.
-  const podeEnviar = !ocupado && !bloqueado && !carregando && !listando && (texto.trim() !== "" || foto !== null);
+  const podeEnviar = !ocupado && !bloqueado && !carregando && !listando && !aguardando && (texto.trim() !== "" || foto !== null);
+
+  const demorou = agora - passoEm > DEMORA_MS;
+  const pensando = (
+    <div className="msg msg--coach" role="status">
+      <div className="msg__balao pensando">
+        <span className="pensando__blocos" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </span>
+        <span className="pensando__frase">
+          {frasePasso(passo)}
+          {demorou && <span className="mudo"> ainda trabalhando nisso…</span>}
+        </span>
+      </div>
+    </div>
+  );
 
   const topo = (
     <header className="coach__topo">
@@ -482,6 +640,11 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
           m.papel === "usuario" ? (
             <div key={i} className="msg msg--usuario">
               <div className="msg__balao">
+                {m.foto && (
+                  <span className="msg__selo px" title="A foto não fica guardada">
+                    FOTO
+                  </span>
+                )}
                 <Texto texto={m.texto} />
               </div>
             </div>
@@ -503,18 +666,11 @@ export default function Coach({ abrirCamera = false }: { abrirCamera?: boolean }
                 <Texto texto={envio.texto} />
               </div>
             </div>
-            <div className="msg msg--coach" role="status">
-              <div className="msg__balao pensando">
-                <span className="pensando__blocos" aria-hidden="true">
-                  <i />
-                  <i />
-                  <i />
-                </span>
-                <span className="vt">pensando…</span>
-              </div>
-            </div>
+            {pensando}
           </>
         )}
+
+        {aguardando && !envio && pensando}
 
         {pendente && !envio && <Aprovacao pendente={pendente} decidindo={decidindo} onDecidir={decidir} />}
 

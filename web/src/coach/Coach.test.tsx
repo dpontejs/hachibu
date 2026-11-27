@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Coach, { CHAVE_THREAD, nomeFerramenta } from "./Coach";
 
 function json(body: unknown, status = 200): Response {
@@ -438,5 +438,131 @@ describe("Coach", () => {
   it("chips de memória dizem o que o coach fez", () => {
     expect(nomeFerramenta("lembrar")).toEqual({ texto: "lembrei", skill: false });
     expect(nomeFerramenta("esquecer_gosto")).toEqual({ texto: "esqueci", skill: false });
+  });
+
+  describe("em tempo real", () => {
+    function sse() {
+      let ctrl!: ReadableStreamDefaultController<Uint8Array>;
+      const corpo = new ReadableStream<Uint8Array>({ start: (c) => void (ctrl = c) });
+      const enc = new TextEncoder();
+      return {
+        resposta: new Response(corpo, { headers: { "Content-Type": "text/event-stream" } }),
+        evento: (tipo: string, dado: unknown) =>
+          ctrl.enqueue(enc.encode(`event: ${tipo}\ndata: ${JSON.stringify(dado)}\n\n`)),
+        fechar: () => ctrl.close(),
+      };
+    }
+
+    const RESPOSTA = (id: string) => ({
+      thread_id: id,
+      processando: false,
+      mensagens: [
+        { papel: "usuario", texto: "registra", ferramentas: [], foto: true },
+        { papel: "coach", texto: "Arroz 150 g e frango 120 g. Confere?", ferramentas: ["analisar_foto_refeicao"] },
+      ],
+      pendente: null,
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("mostra os passos reais enquanto o coach trabalha", async () => {
+      const s = sse();
+      mockFetch((u, init) => (u === "/api/coach" && init?.method === "POST" ? s.resposta : undefined));
+      const user = userEvent.setup();
+      renderCoach();
+      await user.type(screen.getByRole("textbox", { name: /mensagem para o coach/i }), "registra");
+      await user.click(screen.getByRole("button", { name: /enviar/i }));
+
+      s.evento("passo", { ferramenta: "analisar_foto_refeicao" });
+      expect(await screen.findByText(/olhando a foto do prato/i)).toBeInTheDocument();
+      s.evento("passo", { ferramenta: "skill:nutricao" });
+      expect(await screen.findByText(/consultando o guia de nutrição/i)).toBeInTheDocument();
+      s.evento("fim", RESPOSTA("t-1"));
+      s.fechar();
+      expect(await screen.findByText("Arroz 150 g e frango 120 g. Confere?")).toBeInTheDocument();
+    });
+
+    it("conversa nova já guarda o id antes da resposta chegar", async () => {
+      const s = sse();
+      const chamadas = mockFetch((u, init) =>
+        u === "/api/coach" && init?.method === "POST" ? s.resposta : undefined,
+      );
+      const user = userEvent.setup();
+      renderCoach();
+      await user.type(screen.getByRole("textbox", { name: /mensagem para o coach/i }), "oi");
+      await user.click(screen.getByRole("button", { name: /enviar/i }));
+      const salvo = localStorage.getItem(CHAVE_THREAD);
+      expect(salvo).toMatch(/^[0-9a-f]{32}$/);
+      const enviado = chamadas.find((c) => c.init?.method === "POST")!.init!.body as FormData;
+      expect(enviado.get("thread_id")).toBe(salvo);
+    });
+
+    it("se a conexão cair, busca a resposta no histórico", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const s = sse();
+      let consultas = 0;
+      mockFetch((u, init) => {
+        if (u === "/api/coach" && init?.method === "POST") return s.resposta;
+        if (u.startsWith("/api/coach/")) {
+          consultas++;
+          const id = u.split("/").pop()!;
+          return json(consultas < 2 ? { ...RESPOSTA(id), processando: true, mensagens: [] } : RESPOSTA(id));
+        }
+      });
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderCoach();
+      await user.type(screen.getByRole("textbox", { name: /mensagem para o coach/i }), "registra");
+      await user.click(screen.getByRole("button", { name: /enviar/i }));
+      s.fechar(); // o iOS derrubou a conexão sem o evento "fim"
+
+      await vi.advanceTimersByTimeAsync(3500);
+      expect(await screen.findByText("Arroz 150 g e frango 120 g. Confere?")).toBeInTheDocument();
+      expect(consultas).toBeGreaterThanOrEqual(2);
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("ao abrir uma conversa ainda em andamento, espera e mostra a resposta", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      localStorage.setItem(CHAVE_THREAD, "t-1");
+      let consultas = 0;
+      mockFetch((u) => {
+        if (u === "/api/coach/t-1") {
+          consultas++;
+          return json(
+            consultas < 2
+              ? { ...RESPOSTA("t-1"), processando: true, mensagens: [RESPOSTA("t-1").mensagens[0]] }
+              : RESPOSTA("t-1"),
+          );
+        }
+      });
+      renderCoach();
+      expect(await screen.findByText(/pensando/i)).toBeInTheDocument();
+      await vi.advanceTimersByTimeAsync(3500);
+      expect(await screen.findByText("Arroz 150 g e frango 120 g. Confere?")).toBeInTheDocument();
+    });
+
+    it("mensagem que tinha foto mostra o selo FOTO no histórico", async () => {
+      localStorage.setItem(CHAVE_THREAD, "t-1");
+      mockFetch((u) => (u === "/api/coach/t-1" ? json(RESPOSTA("t-1")) : undefined));
+      renderCoach();
+      const texto = await screen.findByText("registra");
+      expect(within(texto.closest(".msg")! as HTMLElement).getByText("FOTO")).toBeInTheDocument();
+    });
+
+    it("passo demorado avisa que ainda está trabalhando", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const s = sse();
+      mockFetch((u, init) => (u === "/api/coach" && init?.method === "POST" ? s.resposta : undefined));
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderCoach();
+      await user.type(screen.getByRole("textbox", { name: /mensagem para o coach/i }), "oi");
+      await user.click(screen.getByRole("button", { name: /enviar/i }));
+      s.evento("passo", { ferramenta: "buscar_alimento_taco" });
+      expect(await screen.findByText(/procurando na tabela taco/i)).toBeInTheDocument();
+      await vi.advanceTimersByTimeAsync(16000);
+      expect(await screen.findByText(/ainda trabalhando nisso/i)).toBeInTheDocument();
+    });
   });
 });
