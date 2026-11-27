@@ -110,3 +110,61 @@ def test_app_de_producao_mostra_o_log_do_coach(monkeypatch, tmp_path):
     raiz = logging.getLogger("hachibu")
     assert raiz.getEffectiveLevel() == logging.INFO
     assert raiz.handlers
+
+
+def eventos(corpo: str) -> list[tuple[str, dict]]:
+    import json
+
+    saida = []
+    for bloco in corpo.strip().split("\n\n"):
+        linhas = [linha for linha in bloco.split("\n") if not linha.startswith(":")]
+        if not linhas:
+            continue
+        tipo = next(linha[7:] for linha in linhas if linha.startswith("event: "))
+        dado = next(linha[6:] for linha in linhas if linha.startswith("data: "))
+        saida.append((tipo, json.loads(dado)))
+    return saida
+
+
+def enviar_stream(c, mensagem="oi", thread_id=None):
+    data = {"mensagem": mensagem} | ({"thread_id": thread_id} if thread_id else {})
+    return c.post("/api/coach", data=data, headers={"Accept": "text/event-stream"})
+
+
+def test_stream_manda_os_passos_e_depois_a_resposta(app, aluno):
+    app.state.modelo_coach = roteiro(
+        chamada("carregar_skill", {"nome": "nutricao"}, "c1"),
+        chamada("saldo_do_dia", {}, "c2"),
+        "Faltam 900.",
+    )
+    r = enviar_stream(aluno, "como estou?", thread_id=ID)
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
+    evs = eventos(r.text)
+    assert evs[:2] == [("passo", {"ferramenta": "skill:nutricao"}), ("passo", {"ferramenta": "saldo_do_dia"})]
+    tipo, fim = evs[-1]
+    assert tipo == "fim" and fim["thread_id"] == ID and fim["mensagens"][-1]["texto"] == "Faltam 900."
+
+
+def test_stream_com_falha_do_modelo_manda_evento_de_erro(app, aluno):
+    class Quebrado:
+        def bind_tools(self, *a, **k):
+            return self
+
+        def invoke(self, *a, **k):
+            raise RuntimeError("fora do ar")
+
+    app.state.modelo_coach = Quebrado()
+    evs = eventos(enviar_stream(aluno, "oi", thread_id=ID).text)
+    assert evs[-1] == ("erro", {"status": 503, "detail": "coach_indisponivel"})
+
+
+def test_stream_com_aprovacao_pendente_manda_erro_409(app, aluno):
+    app.state.modelo_coach = roteiro(chamada("ajustar_metas", {"kcal": 2400, "justificativa": "x"}), "ok")
+    enviar(aluno, "ajusta", thread_id=ID)
+    evs = eventos(enviar_stream(aluno, "oi", thread_id=ID).text)
+    assert evs[-1] == ("erro", {"status": 409, "detail": "aprovacao_pendente"})
+
+
+def test_validacao_continua_antes_do_stream(app, aluno):
+    app.state.modelo_coach = roteiro("Oi!")
+    assert enviar_stream(aluno, "oi", thread_id="xyz").status_code == 422

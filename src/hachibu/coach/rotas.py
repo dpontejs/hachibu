@@ -1,5 +1,7 @@
 """Rotas do coach: conversa, decisão sobre propostas e histórico, com dono da thread e cota diária."""
 
+import asyncio
+import json
 import logging
 import re
 import time
@@ -10,6 +12,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Form, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from hachibu.auth import UserId
@@ -20,6 +23,7 @@ from hachibu.diario import hoje
 
 router = APIRouter(prefix="/api/coach")
 log = logging.getLogger("hachibu.coach")
+BATIDA_S = 15  # comentário SSE de tempos em tempos: proxies e o iOS não derrubam a conexão parada
 THREAD_ID = re.compile(r"^[0-9a-f]{32}$")
 TAMANHO_TITULO = 60
 LIMITE_CONVERSAS = 50
@@ -187,9 +191,57 @@ async def conversar(
     _contar_uso(db, request, user_id)
     thread_id = thread_id or uuid.uuid4().hex
     kwargs = {"mensagem": mensagem, "foto": anexo}
+    if "text/event-stream" in request.headers.get("accept", ""):
+        return StreamingResponse(
+            _eventos(request, user_id, thread_id, nova, mensagem, kwargs),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
     # O agente é síncrono e a chamada ao modelo leva segundos: fora do event loop.
     r = await run_in_threadpool(_executar, request, user_id, thread_id, nova, mensagem, kwargs)
     return _saida(thread_id, r)
+
+
+def _sse(tipo: str, dado: dict) -> str:
+    return f"event: {tipo}\ndata: {json.dumps(dado, ensure_ascii=False)}\n\n"
+
+
+async def _eventos(request: Request, user_id: int, thread_id: str, nova: bool, mensagem: str, kwargs: dict):
+    """Passos do agente conforme acontecem, e no fim a mesma saída da rota JSON.
+
+    Se o app desconectar (iOS em segundo plano), o agente continua na thread e grava a resposta: o app a
+    recupera pelo histórico.
+    """
+    loop = asyncio.get_running_loop()
+    fila: asyncio.Queue[str] = asyncio.Queue()
+
+    def ao_passo(nome: str) -> None:
+        loop.call_soon_threadsafe(fila.put_nowait, nome)
+
+    tarefa = asyncio.ensure_future(
+        run_in_threadpool(_executar, request, user_id, thread_id, nova, mensagem, kwargs, ao_passo)
+    )
+    while True:
+        pegar = asyncio.ensure_future(fila.get())
+        feitos, _ = await asyncio.wait({pegar, tarefa}, timeout=BATIDA_S, return_when=asyncio.FIRST_COMPLETED)
+        if pegar in feitos:
+            yield _sse("passo", {"ferramenta": pegar.result()})
+            continue
+        pegar.cancel()
+        if tarefa not in feitos:
+            yield ": vivo\n\n"
+            continue
+        while not fila.empty():
+            yield _sse("passo", {"ferramenta": fila.get_nowait()})
+        erro = tarefa.exception()
+        if isinstance(erro, HTTPException):
+            yield _sse("erro", {"status": erro.status_code, "detail": erro.detail})
+        elif erro is not None:
+            log.error("coach falhou no stream: %s", type(erro).__name__)
+            yield _sse("erro", {"status": 500, "detail": "erro_interno"})
+        else:
+            yield _sse("fim", _saida(thread_id, tarefa.result()))
+        return
 
 
 @router.post("/{thread_id}/decisao")
