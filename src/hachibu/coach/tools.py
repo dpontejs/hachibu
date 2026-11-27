@@ -8,6 +8,7 @@ from collections.abc import Callable
 from datetime import datetime
 
 from langchain_core.tools import BaseTool, tool
+from langgraph.types import interrupt
 from pydantic import BaseModel, Field
 
 from hachibu.coach import ferramentas as f
@@ -86,7 +87,35 @@ def criar_tools(
         """Propõe uma nova meta diária. O aluno vê a proposta e a justificativa e aprova antes de valer.
         Macros omitidos são completados pela fórmula. Metas abaixo do piso ou com déficit acima de 25% do
         gasto diário são recusadas pelo sistema."""
-        return rodar(f.aplicar_ajuste_metas, kcal, agora(), proteina_g, carbo_g, gordura_g)
+        db = connect(db_path)
+        try:
+            # Valida antes de pedir aprovação: proposta inválida nunca chega ao aluno.
+            proposta = f.validar_ajuste_metas(db, user_id, kcal, proteina_g, carbo_g, gordura_g)
+            atual = f.saldo_do_dia(db, user_id, agora())["metas"]
+        except f.ErroFerramenta as e:
+            return f"erro: {e}"
+        finally:
+            db.close()
+        decisao = interrupt(
+            {
+                "ferramenta": "ajustar_metas",
+                "args": {
+                    **proposta.model_dump(exclude={"agua_ml", "origem"}),
+                    "justificativa": justificativa,
+                },
+                "descricao": (
+                    f"Meta diária de {atual['kcal']} kcal para {proposta.kcal} kcal "
+                    f"(proteína {proposta.proteina_g} g, carbo {proposta.carbo_g} g, "
+                    f"gordura {proposta.gordura_g} g). Motivo: {justificativa}"
+                ),
+            }
+        )
+        if not decisao.get("aprovar"):
+            motivo = decisao.get("motivo") or "sem motivo informado"
+            return f"recusado pelo aluno, nada mudou. Motivo: {motivo}"
+        return "aprovado e aplicado: " + rodar(
+            f.aplicar_ajuste_metas, kcal, agora(), proteina_g, carbo_g, gordura_g
+        )
 
     @tool
     def analisar_foto_refeicao() -> str:
