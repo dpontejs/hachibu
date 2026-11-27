@@ -117,3 +117,11 @@ def mensagens_da_thread(settings: Settings, thread_id: str) -> list[str]:
     if estado is None:
         return []
     return [m.text for m in estado["channel_values"].get("messages", []) if isinstance(m, ToolMessage)]
+
+
+def historico(settings: Settings, modelo, user_id: int, thread_id: str) -> RespostaCoach:
+    """Conversa salva e proposta pendente, sem chamar o modelo."""
+    agente = _agente(settings, modelo, user_id, lambda: datetime.now(UTC))
+    estado = agente.get_state({"configurable": {"thread_id": thread_id}})
+    pendente = Pendente(**estado.interrupts[0].value) if estado.interrupts else None
+    return RespostaCoach(montar_mensagens(estado.values.get("messages", [])), pendente)

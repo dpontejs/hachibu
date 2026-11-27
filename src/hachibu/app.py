@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
 from hachibu import alimentos, auth, diario, perfil
+from hachibu.coach import rotas as coach_rotas
 from hachibu.config import Settings
 from hachibu.db import connect, migrate
 
@@ -23,6 +24,8 @@ def create_app(settings: Settings) -> FastAPI:
     app.include_router(perfil.router)
     app.include_router(diario.router)
     app.include_router(alimentos.router)
+    app.include_router(coach_rotas.router)
+    app.state.modelo_coach = _modelo_coach(settings)
 
     @app.get("/healthz")
     def healthz() -> dict:
@@ -31,6 +34,15 @@ def create_app(settings: Settings) -> FastAPI:
     if settings.static_dir:
         _servir_spa(app, Path(settings.static_dir).resolve())
     return app
+
+
+def _modelo_coach(settings: Settings):
+    """Gemini do coach; sem chave, o coach responde 503 e o resto do app funciona."""
+    if not settings.gemini_api_key:
+        return None
+    from langchain.chat_models import init_chat_model
+
+    return init_chat_model(settings.coach_modelo, api_key=settings.gemini_api_key, temperature=0.3)
 
 
 def _servir_spa(app: FastAPI, dist: Path) -> None:
