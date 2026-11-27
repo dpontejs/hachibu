@@ -787,6 +787,7 @@ describe("Coach", () => {
                     nome: "Superior A",
                     itens: ["Supino reto com barra · 3 × 8–12", "Remada curvada com barra · 3 × 8–12"],
                     corrida: "Corrida e caminhada · progressão de iniciante",
+                    cardio: "Bicicleta leve · 20 min",
                   },
                   { dia: "terça", nome: "Descanso", itens: [], corrida: null },
                 ],
@@ -800,7 +801,8 @@ describe("Coach", () => {
     const card = await screen.findByRole("region", { name: /proposta de plano/i });
     const segunda = within(card).getByRole("group", { name: /segunda/i });
     expect(within(segunda).getByText("Superior A")).toBeInTheDocument();
-    expect(within(segunda).getAllByRole("listitem")).toHaveLength(3);
+    expect(within(segunda).getAllByRole("listitem")).toHaveLength(4);
+    expect(within(segunda).getByText("Bicicleta leve · 20 min")).toBeInTheDocument();
     expect(within(card).getByRole("group", { name: /terça/i })).toHaveTextContent("Descanso");
     expect(within(card).queryByRole("list", { name: /mudanças/i })).not.toBeInTheDocument();
   });

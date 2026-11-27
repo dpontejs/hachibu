@@ -13,6 +13,7 @@ interface DiaResumo {
   nome: string;
   itens: string[];
   corrida: string | null;
+  cardio?: string | null;
 }
 
 /** A semana proposta em blocos: um por dia, um exercício por linha, a corrida à parte. */
@@ -24,12 +25,13 @@ function Semana({ dias }: { dias: DiaResumo[] }) {
           <h4>
             <span className="px">{d.dia.slice(0, 3).toUpperCase()}</span> {d.nome}
           </h4>
-          {(d.itens.length > 0 || d.corrida) && (
+          {(d.itens.length > 0 || d.corrida || d.cardio) && (
             <ul>
               {d.itens.map((item, i) => (
                 <li key={i}>{item}</li>
               ))}
               {d.corrida && <li className="aprovacao__corrida">{d.corrida}</li>}
+              {d.cardio && <li className="aprovacao__corrida">{d.cardio}</li>}
             </ul>
           )}
         </section>

@@ -177,5 +177,16 @@ describe("Treino", () => {
     await user.click(botao);
     expect(await screen.findByRole("button", { name: /montar com o coach/i })).toBeInTheDocument();
   });
+
+  it("mostra o cardio do dia separado da corrida", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: new Date("2026-11-30T10:00:00") }); // segunda
+    const dias = PLANO.dias.map((d) =>
+      d.dia === 0 ? { ...d, cardio: { modalidade: "bicicleta", duracao_min: 20, intensidade: "leve" } } : d,
+    );
+    servidor((u) => (u === "/api/plano" ? json({ ...PLANO, dias }) : undefined));
+    renderTreino();
+    const hoje = await screen.findByRole("region", { name: /hoje/i });
+    expect(within(hoje).getByText(/bicicleta leve · 20 min/i)).toBeInTheDocument();
+  });
 });
 

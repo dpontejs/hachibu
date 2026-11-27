@@ -38,6 +38,7 @@ interface Form {
   corrida_quando: CorridaQuando | "";
   corridas_semana: string;
   minutos_corrida: string;
+  minutos_cardio: string;
 }
 
 const VAZIO: Form = {
@@ -61,6 +62,7 @@ const VAZIO: Form = {
   corrida_quando: "",
   corridas_semana: "",
   minutos_corrida: "",
+  minutos_cardio: "",
 };
 
 function deApi(p: DadosPerfil): Form {
@@ -86,6 +88,7 @@ function deApi(p: DadosPerfil): Form {
     corrida_quando: p.corrida_quando ?? "",
     corridas_semana: s(p.corridas_semana),
     minutos_corrida: s(p.minutos_corrida),
+    minutos_cardio: s(p.minutos_cardio),
   };
 }
 
@@ -113,6 +116,7 @@ function paraApi(f: Form): DadosPerfil {
     corrida_quando: f.corrida_quando || null,
     corridas_semana: opcional(f.corridas_semana),
     minutos_corrida: opcional(f.minutos_corrida),
+    minutos_cardio: opcional(f.minutos_cardio),
   };
 }
 
@@ -328,6 +332,14 @@ export default function Perfil() {
             aoMudar={(v) => mudar("corridas_semana", v)}
           />
           {numero("minutos_corrida", "Minutos de corrida por sessão", "min", 10, 240, false)}
+        </Grupo>
+
+        <Grupo
+          titulo="CARDIO"
+          nota="Opcional. Cardio de baixa intensidade (bicicleta, elíptico, caminhada), separado da corrida e da musculação. Com os minutos preenchidos, o coach propõe cardio leve e conversa sobre a frequência."
+          destaque
+        >
+          {numero("minutos_cardio", "Minutos de cardio por dia", "min", 5, 120, false)}
         </Grupo>
 
         <Grupo titulo="OPCIONAL" nota="Deixe em branco o que não souber." destaque>

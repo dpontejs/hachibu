@@ -36,6 +36,8 @@ export interface Perfil {
   corridas_semana?: number | null;
   /** Minutos de corrida por sessão, separados dos de musculação (`minutos_sessao`). */
   minutos_corrida?: number | null;
+  /** Minutos de cardio de baixa intensidade por dia (bicicleta, elíptico…), separados da corrida. */
+  minutos_cardio?: number | null;
 }
 
 export type CorridaQuando = "automatico" | "mesmo_dia" | "dias_separados";
@@ -190,7 +192,7 @@ export interface ExercicioDia {
 export interface CorridaDia {
   /** Vem da semana atual da progressão de iniciante. */
   progressao: boolean;
-  tipo: "corrida_caminhada" | "leve" | "intervalado" | "longao" | "recuperacao";
+  tipo: "corrida_caminhada" | "leve" | "intervalado" | "longao";
   duracao_min: number;
   corre_min: number | null;
   anda_min: number | null;
@@ -198,11 +200,19 @@ export interface CorridaDia {
   esforco_alvo: string;
 }
 
+/** Cardio que não é corrida; leve não conta como treino pesado. */
+export interface CardioDia {
+  modalidade: "bicicleta" | "eliptico" | "caminhada" | "escada" | "remo";
+  duracao_min: number;
+  intensidade: "leve" | "moderada";
+}
+
 export interface DiaTreino {
   dia: number;
   nome: string;
   exercicios: ExercicioDia[];
   corrida: CorridaDia | null;
+  cardio?: CardioDia | null;
 }
 
 export interface PlanoTreino {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { api, mensagemDeErro, type CorridaDia, type DiaTreino, type PlanoTreino } from "../api";
+import { api, mensagemDeErro, type CardioDia, type CorridaDia, type DiaTreino, type PlanoTreino } from "../api";
 import { abrirCoachCom, EVENTO_PLANO } from "../coach/abrir";
 
 const PEDIDO_MONTAR = "Quero montar meu plano de treino e corrida.";
@@ -20,15 +20,36 @@ export function descreverCorrida(c: CorridaDia): string {
     if (!c.anda_min) return `${minutos(c.corre_min)} correndo sem parar`;
     return `${minutos(c.corre_min)} correndo + ${minutos(c.anda_min)} andando × ${c.repeticoes ?? 1}`;
   }
-  if (c.tipo === "recuperacao") return `Recuperação · ${minutos(c.duracao_min)} de caminhada leve ou mobilidade`;
   const nome = { leve: "Leve", intervalado: "Intervalado", longao: "Longão", corrida_caminhada: "Corrida" }[c.tipo];
   return `${nome} · ${minutos(c.duracao_min)}`;
+}
+
+const MODALIDADES: Record<CardioDia["modalidade"], string> = {
+  bicicleta: "Bicicleta",
+  eliptico: "Elíptico",
+  caminhada: "Caminhada",
+  escada: "Escada",
+  remo: "Remo",
+};
+
+export function descreverCardio(c: CardioDia): string {
+  return `${MODALIDADES[c.modalidade]} ${c.intensidade} · ${minutos(c.duracao_min)}`;
+}
+
+function Cardio({ c }: { c: CardioDia }) {
+  return (
+    <div className="treino__corrida">
+      <span className="rotulo px">CARDIO</span>
+      <p>{descreverCardio(c)}</p>
+    </div>
+  );
 }
 
 function resumo(d: DiaTreino): string {
   const partes: string[] = [];
   if (d.exercicios.length) partes.push(`${d.exercicios.length} exercícios`);
   if (d.corrida) partes.push(d.corrida.tipo === "corrida_caminhada" ? `corrida ${d.corrida.duracao_min} min` : descreverCorrida(d.corrida));
+  if (d.cardio) partes.push(descreverCardio(d.cardio).toLowerCase());
   return partes.join(" + ");
 }
 
@@ -192,9 +213,12 @@ export default function Treino() {
           HOJE · {DIAS[hojeIdx]}
         </h2>
         <h3 className="treino__nome">{hoje.nome}</h3>
-        {!hoje.exercicios.length && !hoje.corrida && <p className="mudo">Dia de descanso. Recuperar também é treino.</p>}
+        {!hoje.exercicios.length && !hoje.corrida && !hoje.cardio && (
+          <p className="mudo">Dia de descanso. Recuperar também é treino.</p>
+        )}
         <Exercicios d={hoje} />
         {hoje.corrida && <Corrida c={hoje.corrida} />}
+        {hoje.cardio && <Cardio c={hoje.cardio} />}
       </section>
 
       <section aria-labelledby="treino-semana">
@@ -216,6 +240,7 @@ export default function Treino() {
                 </summary>
                 <Exercicios d={d} />
                 {d.corrida && <Corrida c={d.corrida} />}
+                {d.cardio && <Cardio c={d.cardio} />}
               </details>
             </li>
           ))}
