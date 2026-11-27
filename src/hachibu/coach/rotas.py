@@ -1,6 +1,8 @@
 """Rotas do coach: conversa, decisão sobre propostas e histórico, com dono da thread e cota diária."""
 
 import logging
+import re
+import time
 import uuid
 from dataclasses import asdict
 from datetime import UTC, datetime
@@ -13,11 +15,12 @@ from pydantic import BaseModel, Field
 from hachibu.auth import UserId
 from hachibu.coach.agente import AprovacaoPendente, RespostaCoach, historico, primeira_fala, responder
 from hachibu.coach.foto import TAMANHO_MAXIMO, validar_foto
-from hachibu.db import Db
+from hachibu.db import Db, connect
 from hachibu.diario import hoje
 
 router = APIRouter(prefix="/api/coach")
 log = logging.getLogger("hachibu.coach")
+THREAD_ID = re.compile(r"^[0-9a-f]{32}$")
 TAMANHO_TITULO = 60
 LIMITE_CONVERSAS = 50
 
@@ -61,26 +64,79 @@ def titulo_de(fala: str) -> str:
     return texto if len(texto) <= TAMANHO_TITULO else texto[: TAMANHO_TITULO - 1].rstrip() + "…"
 
 
-def _registrar(db, user_id: int, thread_id: str, nova: bool, mensagem: str, r: RespostaCoach) -> None:
-    """Grava a conversa no índice só depois que o coach respondeu: falha não cria nem reordena conversa."""
-    agora = datetime.now(UTC).isoformat()
-    pendente = int(r.pendente is not None)
-    if nova:
-        db.execute(
-            "INSERT INTO coach_threads (thread_id, user_id, criado_em, atualizado_em, titulo, pendente) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (thread_id, user_id, agora, agora, titulo_de(mensagem), pendente),
-        )
-    else:
+def _em_andamento(request: Request) -> set[str]:
+    """Threads processando agora neste processo (um worker): o app usa para recuperar a resposta."""
+    if not hasattr(request.app.state, "coach_em_andamento"):
+        request.app.state.coach_em_andamento = set()
+    return request.app.state.coach_em_andamento
+
+
+def _executar(
+    request: Request,
+    user_id: int,
+    thread_id: str,
+    nova: bool,
+    mensagem: str,
+    funcao_kwargs: dict,
+    ao_passo=None,
+) -> RespostaCoach:
+    """Roda o agente (em thread do pool) com o registro da conversa, o "processando" e o log.
+
+    Conversa nova: a linha é criada antes (o app já pode consultar o histórico) e apagada se falhar.
+    O log tem só métricas, nunca o texto (dados de saúde).
+    """
+    settings = request.app.state.settings
+    modelo = request.app.state.modelo_coach
+    andamento = _em_andamento(request)
+    passos: list[str] = []
+    inicio = time.monotonic()
+    resultado = "erro"
+
+    def passo(nome: str) -> None:
+        passos.append(nome)
+        if ao_passo:
+            ao_passo(nome)
+
+    db = connect(settings.db_path)
+    try:
+        agora = datetime.now(UTC).isoformat()
+        if nova:
+            db.execute(
+                "INSERT INTO coach_threads (thread_id, user_id, criado_em, atualizado_em, titulo) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (thread_id, user_id, agora, agora, titulo_de(mensagem)),
+            )
+        andamento.add(thread_id)
+        try:
+            r = _chamar(responder, settings, modelo, user_id, thread_id, ao_passo=passo, **funcao_kwargs)
+        except BaseException:
+            if nova:
+                db.execute("DELETE FROM coach_threads WHERE thread_id = ?", (thread_id,))
+            raise
         db.execute(
             "UPDATE coach_threads SET atualizado_em = ?, pendente = ? WHERE thread_id = ?",
-            (agora, pendente, thread_id),
+            (datetime.now(UTC).isoformat(), int(r.pendente is not None), thread_id),
+        )
+        resultado = "pendente" if r.pendente else "ok"
+        return r
+    finally:
+        andamento.discard(thread_id)
+        db.close()
+        log.info(
+            "coach thread=%s duracao=%.1fs passos=%d ferramentas=%s foto=%s resultado=%s",
+            thread_id[:8],
+            time.monotonic() - inicio,
+            len(passos),
+            ",".join(passos) or "-",
+            "sim" if funcao_kwargs.get("foto") else "nao",
+            resultado,
         )
 
 
-def _saida(thread_id: str, r: RespostaCoach) -> dict:
+def _saida(thread_id: str, r: RespostaCoach, processando: bool = False) -> dict:
     return {
         "thread_id": thread_id,
+        "processando": processando,
         "mensagens": [asdict(m) for m in r.mensagens],
         "pendente": asdict(r.pendente) if r.pendente else None,
     }
@@ -108,9 +164,15 @@ async def conversar(
     thread_id: Annotated[str | None, Form(max_length=64)] = None,
     foto: UploadFile | None = None,
 ) -> dict:
-    modelo = _modelo(request)
+    _modelo(request)
+    nova = True
     if thread_id:
-        _exigir_dono(db, user_id, thread_id)
+        if not THREAD_ID.match(thread_id):
+            raise HTTPException(422, "thread_id inválido")
+        existe = db.execute("SELECT 1 FROM coach_threads WHERE thread_id = ?", (thread_id,)).fetchone()
+        if existe:
+            _exigir_dono(db, user_id, thread_id)
+            nova = False
     anexo = None
     if foto is not None:
         # Recusa antes de carregar tudo na memória: o upload não tem limite no multipart.
@@ -123,14 +185,10 @@ async def conversar(
             raise HTTPException(422, str(e)) from None
         anexo = (conteudo, foto.content_type)
     _contar_uso(db, request, user_id)
-    nova = not thread_id
     thread_id = thread_id or uuid.uuid4().hex
-    settings = request.app.state.settings
+    kwargs = {"mensagem": mensagem, "foto": anexo}
     # O agente é síncrono e a chamada ao modelo leva segundos: fora do event loop.
-    r = await run_in_threadpool(
-        _chamar, responder, settings, modelo, user_id, thread_id, mensagem=mensagem, foto=anexo
-    )
-    _registrar(db, user_id, thread_id, nova, mensagem, r)
+    r = await run_in_threadpool(_executar, request, user_id, thread_id, nova, mensagem, kwargs)
     return _saida(thread_id, r)
 
 
@@ -142,9 +200,7 @@ def decidir(thread_id: str, dados: DecisaoIn, request: Request, user_id: UserId,
     if historico(settings, modelo, user_id, thread_id).pendente is None:
         raise HTTPException(409, "nada_para_decidir")
     decisao = {"aprovar": dados.aprovar, "motivo": dados.motivo}
-    r = _chamar(responder, settings, modelo, user_id, thread_id, decisao=decisao)
-    _registrar(db, user_id, thread_id, False, "", r)
-    return _saida(thread_id, r)
+    return _saida(thread_id, _executar(request, user_id, thread_id, False, "", {"decisao": decisao}))
 
 
 # Declarada antes de /{thread_id}: senão "conversas" seria lido como o id de uma thread.
@@ -182,4 +238,5 @@ def listar(request: Request, user_id: UserId, db: Db) -> dict:
 def obter(thread_id: str, request: Request, user_id: UserId, db: Db) -> dict:
     modelo = _modelo(request)
     _exigir_dono(db, user_id, thread_id)
-    return _saida(thread_id, historico(request.app.state.settings, modelo, user_id, thread_id))
+    r = historico(request.app.state.settings, modelo, user_id, thread_id)
+    return _saida(thread_id, r, processando=thread_id in _em_andamento(request))

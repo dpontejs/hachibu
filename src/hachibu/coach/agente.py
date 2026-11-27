@@ -41,6 +41,8 @@ class Mensagem:
     papel: str
     texto: str
     ferramentas: list[str] = field(default_factory=list)
+    # A foto não é guardada (privacidade): o histórico só registra que havia uma.
+    foto: bool = False
 
 
 @dataclass
@@ -100,7 +102,7 @@ def montar_mensagens(historico: list) -> list[Mensagem]:
     usadas: list[str] = []
     for m in historico:
         if isinstance(m, HumanMessage):
-            mensagens.append(Mensagem("usuario", m.text.replace(MARCA_FOTO, "")))
+            mensagens.append(Mensagem("usuario", m.text.replace(MARCA_FOTO, ""), foto=MARCA_FOTO in m.text))
             usadas = []
         elif isinstance(m, AIMessage):
             usadas += [_nome_ferramenta(c) for c in m.tool_calls]
@@ -141,7 +143,9 @@ def responder(
     foto: tuple[bytes, str] | None = None,
     decisao: dict | None = None,
     agora: Callable[[], datetime] | None = None,
+    ao_passo: Callable[[str], None] | None = None,
 ) -> RespostaCoach:
+    """`ao_passo` recebe o nome de cada ferramenta (ou `skill:x`) no momento em que o modelo a pede."""
     relogio = agora or (lambda: datetime.now(UTC))
     agente = _agente(settings, modelo, user_id, relogio, foto)
     config = {"configurable": {"thread_id": thread_id}, "recursion_limit": LIMITE_PASSOS}
@@ -157,15 +161,21 @@ def responder(
         _remendar_orfas(agente, config, estado.values.get("messages", []))
         entrada = {"messages": [HumanMessage((mensagem or "") + (MARCA_FOTO if foto else ""))]}
     try:
-        resultado = agente.invoke(entrada, config)
+        # stream em vez de invoke: cada volta do nó "model" que pede ferramentas vira um passo visível.
+        for atualizacao in agente.stream(entrada, config, stream_mode="updates"):
+            for mensagem_ in (atualizacao.get("model") or {}).get("messages", []):
+                for chamada in getattr(mensagem_, "tool_calls", None) or []:
+                    if ao_passo:
+                        ao_passo(_nome_ferramenta(chamada))
     except GraphRecursionError:
         historico_ = agente.get_state(config).values.get("messages", [])
         return RespostaCoach([*montar_mensagens(historico_), Mensagem("coach", DESISTENCIA)], None)
     # A proposta mostrada sai do estado salvo, a mesma fonte que a decisão usa para retomar: com duas pausas,
     # a ordem em resultado["__interrupt__"] pode diferir e o card não corresponderia à decisão.
-    pausas = agente.get_state(config).interrupts
+    final = agente.get_state(config)
+    pausas = final.interrupts
     pendente = Pendente(**pausas[0].value) if pausas else None
-    return RespostaCoach(montar_mensagens(resultado["messages"]), pendente)
+    return RespostaCoach(montar_mensagens(final.values.get("messages", [])), pendente)
 
 
 def mensagens_da_thread(settings: Settings, thread_id: str) -> list[str]:
