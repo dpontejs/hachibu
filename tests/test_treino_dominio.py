@@ -7,7 +7,7 @@ import pytest
 from hachibu.metas import PerfilIn
 from hachibu.treino.base import gerar_plano_base, plano_base
 from hachibu.treino.exercicios import CATALOGO, PERNAS, buscar, por_id
-from hachibu.treino.modelos import CorridaPlano, DiaPlano, ExercicioPlano, PlanoIn
+from hachibu.treino.modelos import CardioPlano, CorridaPlano, DiaPlano, ExercicioPlano, PlanoIn
 from hachibu.treino.progressao import PROGRESSAO_INICIANTE, corrida_da_semana
 from hachibu.treino.validador import validar_plano
 from tests.test_metas import BASE
@@ -112,7 +112,7 @@ def test_corredor_intermediario_tem_leves_e_longao():
 
 
 @pytest.mark.parametrize(
-    "dias,equipamento,nivel,quando,minutos,nivel_corrida,minutos_corrida",
+    "dias,equipamento,nivel,quando,minutos,nivel_corrida,minutos_corrida,minutos_cardio",
     list(
         itertools.product(
             range(1, 8),
@@ -122,11 +122,12 @@ def test_corredor_intermediario_tem_leves_e_longao():
             [15, 30, 60, 90],
             [None, "intermediario", "avancado"],
             [None, 20, 45],
+            [None, 30],
         )
     ),
 )
 def test_todo_perfil_razoavel_gera_plano_valido(
-    dias, equipamento, nivel, quando, minutos, nivel_corrida, minutos_corrida
+    dias, equipamento, nivel, quando, minutos, nivel_corrida, minutos_corrida, minutos_cardio
 ):
     p = perfil(
         dias_semana=dias,
@@ -136,6 +137,7 @@ def test_todo_perfil_razoavel_gera_plano_valido(
         minutos_sessao=minutos,
         nivel_corrida=nivel_corrida,
         minutos_corrida=minutos_corrida,
+        minutos_cardio=minutos_cardio,
     )
     plano, _ = gerar_plano_base(p)
     for semana in (1, 9):
@@ -276,8 +278,8 @@ def test_sete_dias_e_seis_corridas_depois_da_musculacao():
     plano, pontos = gerar_plano_base(p)
     musc = [d for d in plano.dias if d.exercicios]
     assert len(musc) == 6 and all(d.corrida for d in musc)
-    recuperacao = [d for d in plano.dias if d.corrida and d.corrida.tipo == "recuperacao"]
-    assert len(recuperacao) == 1 and not recuperacao[0].exercicios
+    recuperacao = [d for d in plano.dias if not d.exercicios and not d.corrida]
+    assert len(recuperacao) == 1 and recuperacao[0].cardio and recuperacao[0].cardio.intensidade == "leve"
     assert any("recuperação" in a for a in pontos)
     assert validar_plano(plano, p) == []
 
@@ -290,7 +292,7 @@ def test_validador_exige_um_dia_sem_treino_pesado():
         DiaPlano(
             dia=6,
             nome="Recuperação",
-            corrida=CorridaPlano(tipo="recuperacao", duracao_min=30, esforco_alvo="1-3"),
+            cardio=CardioPlano(modalidade="caminhada", duracao_min=30, intensidade="leve"),
         ),
     )
     assert validar_plano(com_recuperacao, corredor(dias_semana=7)) == []
@@ -344,3 +346,58 @@ def test_iniciante_com_6_corridas_fica_com_3_da_progressao_e_vira_pergunta():
     plano, pontos = gerar_plano_base(p)
     assert len([d for d in plano.dias if d.corrida and d.corrida.progressao]) == 3
     assert any("3 corridas" in a for a in pontos)
+
+
+# ---------- cardio (separado da corrida) ----------
+
+
+def cardio(dia: int, intensidade="leve", minutos=30, modalidade="bicicleta") -> DiaPlano:
+    c = CardioPlano(modalidade=modalidade, duracao_min=minutos, intensidade=intensidade)
+    return DiaPlano(dia=dia, nome="Cardio", cardio=c)
+
+
+def test_com_minutos_de_cardio_o_rascunho_poe_cardio_leve_todo_dia():
+    p = perfil(minutos_cardio=20)
+    plano, pontos = gerar_plano_base(p)
+    assert all(d.cardio and d.cardio.intensidade == "leve" and d.cardio.duracao_min == 20 for d in plano.dias)
+    assert all(d.cardio.modalidade == "bicicleta" for d in plano.dias)
+    assert any("cardio" in a for a in pontos)
+    assert validar_plano(plano, p) == []
+
+
+def test_cardio_em_casa_vira_caminhada():
+    plano = plano_base(perfil(minutos_cardio=20, equipamento="peso_corporal"))
+    assert {d.cardio.modalidade for d in plano.dias} == {"caminhada"}
+
+
+def test_sem_minutos_de_cardio_e_objetivo_perder_vira_pergunta():
+    plano, pontos = gerar_plano_base(perfil(objetivo="perder"))
+    assert not any(d.cardio for d in plano.dias)
+    assert any("cardio" in a for a in pontos)
+
+
+def test_cardio_leve_nao_conta_mas_moderado_conta_como_dia_de_treino():
+    leves = plano_de(*[cardio(i) for i in range(7)])
+    assert validar_plano(leves, corredor(dias_semana=1)) == []
+    moderados = plano_de(*[cardio(i, "moderada") for i in range(3)])
+    assert any("dias" in e for e in validar_plano(moderados, corredor(dias_semana=2)))
+
+
+def test_cardio_respeita_os_minutos_de_cardio():
+    assert any(
+        "cardio" in e for e in validar_plano(plano_de(cardio(0, minutos=45)), corredor(minutos_cardio=30))
+    )
+    assert any("cardio" in e for e in validar_plano(plano_de(cardio(0, minutos=90)), corredor()))
+
+
+def test_cardio_moderado_nao_vem_depois_de_perna_pesada():
+    erros = validar_plano(plano_de(perna(0), cardio(1, "moderada")), corredor())
+    assert any("perna" in e for e in erros)
+    assert validar_plano(plano_de(perna(0), cardio(1, "leve")), corredor()) == []
+
+
+def test_cardio_nao_entra_no_volume_de_corrida():
+    from hachibu.treino.validador import volume_corrida
+
+    plano = plano_de(corrida(1, minutos=30), cardio(2, minutos=60))
+    assert volume_corrida(plano, 1) == 30

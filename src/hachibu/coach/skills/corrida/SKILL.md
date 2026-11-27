@@ -17,8 +17,8 @@ Sem teste de 5 km, planeje por tempo e esforço percebido. Com o teste, os ritmo
   de corrida do iniciante com `progressao: true` em vez de inventar blocos.
 - Quem está sem preparo físico: comece pela progressão mesmo que a pessoa se ache capaz de mais; é mais
   fácil subir do que se recuperar de uma lesão.
-- Dia de recuperação (`tipo: "recuperacao"`, até 40 min, esforço 1–3): caminhada leve ou mobilidade. É a
-  opção para quem quer se mexer todo dia sem abrir mão de um dia sem treino pesado.
+- Cardio que não é corrida (bicicleta, elíptico, caminhada…) não entra aqui: vai no campo `cardio` do dia e
+  não conta no volume de corrida nem na regra dos 10%.
 
 ## Progressão
 - **Regra dos 10%:** o volume semanal sobe no máximo 10% de uma semana para a outra.

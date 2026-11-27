@@ -10,7 +10,7 @@ from hachibu.db import connect
 from hachibu.metas import PerfilIn
 from hachibu.treino.base import plano_base
 from hachibu.treino.diferencas import diferencas
-from hachibu.treino.modelos import CorridaPlano, DiaPlano, PlanoIn
+from hachibu.treino.modelos import CardioPlano, CorridaPlano, DiaPlano, PlanoIn
 from hachibu.treino.repositorio import gravar_plano, plano_ativo
 from tests.coach_fake import chamada, roteiro
 from tests.test_metas import BASE
@@ -60,11 +60,11 @@ def test_diferencas_series_e_corrida():
     depois.dias[6] = DiaPlano(
         dia=6,
         nome="Recuperação",
-        corrida=CorridaPlano(tipo="recuperacao", duracao_min=30, esforco_alvo="1-3"),
+        cardio=CardioPlano(modalidade="caminhada", duracao_min=30, intensidade="leve"),
     )
     linhas = diferencas(antes, depois)
     assert any("séries" in linha and "segunda" in linha for linha in linhas)
-    assert any("domingo" in linha and "recuperação" in linha.lower() for linha in linhas)
+    assert any("domingo" in linha and "caminhada" in linha.lower() for linha in linhas)
 
 
 def test_resumo_da_semana_em_estrutura():
@@ -205,7 +205,7 @@ def test_plano_de_outro_usuario_fica_isolado(settings, aluno, make_user):
 
 def test_progressao_so_vale_para_corrida_e_caminhada():
     with pytest.raises(ValueError):
-        CorridaPlano(progressao=True, tipo="recuperacao", duracao_min=30, esforco_alvo="1-3")
+        CorridaPlano(progressao=True, tipo="leve", duracao_min=30, esforco_alvo="3-4")
 
 
 def test_campos_de_bloco_sao_ignorados_fora_da_corrida_e_caminhada():
@@ -327,7 +327,7 @@ def test_aprovado_mas_nao_gravado_diz_isso(settings, aluno, monkeypatch):
     assert any(m.startswith("aprovado, mas nada foi gravado") for m in mensagens_da_thread(settings, "t1"))
 
 
-def test_recuperacao_nao_conta_como_dia_de_treino():
+def test_cardio_leve_nao_conta_como_dia_de_treino():
     from hachibu.treino.validador import validar_plano
 
     p = PerfilIn(**BASE | {"dias_semana": 4})
@@ -335,6 +335,6 @@ def test_recuperacao_nao_conta_como_dia_de_treino():
     plano.dias[6] = DiaPlano(
         dia=6,
         nome="Recuperação",
-        corrida=CorridaPlano(tipo="recuperacao", duracao_min=30, esforco_alvo="1-3"),
+        cardio=CardioPlano(modalidade="caminhada", duracao_min=30, intensidade="leve"),
     )
     assert validar_plano(plano, p) == []

@@ -171,10 +171,11 @@ def criar_tools(
 
     @tool
     def propor_plano(plano: PlanoIn, justificativa: str, versao_base: int | None = None) -> str:
-        """Propõe a semana INTEIRA de treino (7 dias, 0 = segunda) para o aluno aprovar. Mantenha igual o que
-        ele não pediu para mudar. versao_base: a versão do plano de que você partiu (versao em ler_plano ou
-        versao_atual em rascunho_plano; vazio se ele ainda não tem plano). O sistema valida as regras e mostra
-        ao aluno só o que muda. Só grava depois da aprovação."""
+        """Propõe a semana INTEIRA de treino (7 dias, 0 = segunda; cada dia com exercícios, corrida e cardio)
+        para o aluno aprovar. Mantenha igual o que ele não pediu para mudar. versao_base: a versão
+        do plano de que você partiu (versao em ler_plano ou versao_atual em rascunho_plano; vazio se
+        ele ainda não tem plano). O sistema valida as regras e mostra ao aluno só o que muda. Só
+        grava depois da aprovação."""
         db = connect(db_path)
         try:
             # Valida antes de pedir aprovação: proposta inválida nunca chega ao aluno. (Na retomada esta

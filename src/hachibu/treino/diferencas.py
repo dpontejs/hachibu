@@ -1,7 +1,7 @@
 """O que muda entre duas versões do plano, em frases curtas: é o que o aluno lê no card de aprovação."""
 
 from hachibu.treino.exercicios import por_id
-from hachibu.treino.modelos import CorridaPlano, DiaPlano, ExercicioPlano, PlanoIn
+from hachibu.treino.modelos import CardioPlano, CorridaPlano, DiaPlano, ExercicioPlano, PlanoIn
 from hachibu.treino.validador import DIAS
 
 
@@ -19,8 +19,6 @@ def _corrida(c: CorridaPlano | None) -> str:
         return "sem corrida"
     if c.progressao:
         return "corrida e caminhada (progressão de iniciante)"
-    if c.tipo == "recuperacao":
-        return f"recuperação {c.duracao_min} min"
     return f"{c.tipo.replace('longao', 'longão')} {c.duracao_min} min"
 
 
@@ -31,10 +29,24 @@ def _corrida_legivel(c: CorridaPlano) -> str:
         "leve": "Corrida leve",
         "intervalado": "Intervalado",
         "longao": "Longão",
-        "recuperacao": "Recuperação",
     }
     texto = f"{nomes.get(c.tipo, 'Corrida')} · {c.duracao_min} min"
-    return texto + (" de caminhada leve ou mobilidade" if c.tipo == "recuperacao" else "")
+    return texto
+
+
+MODALIDADES = {
+    "bicicleta": "Bicicleta",
+    "eliptico": "Elíptico",
+    "caminhada": "Caminhada",
+    "escada": "Escada",
+    "remo": "Remo",
+}
+
+
+def cardio_legivel(c: CardioPlano | None) -> str:
+    if c is None:
+        return "sem cardio"
+    return f"{MODALIDADES[c.modalidade]} {c.intensidade} · {c.duracao_min} min"
 
 
 def resumo_semana(plano: PlanoIn) -> list[dict]:
@@ -47,6 +59,7 @@ def resumo_semana(plano: PlanoIn) -> list[dict]:
                 f"{_nome(e.exercicio_id)} · {e.series} × {e.reps_min}–{e.reps_max}" for e in d.exercicios
             ],
             "corrida": _corrida_legivel(d.corrida) if d.corrida else None,
+            "cardio": cardio_legivel(d.cardio) if d.cardio else None,
         }
         for d in plano.dias
     ]
@@ -63,7 +76,12 @@ def _mesma_corrida(a: CorridaPlano | None, b: CorridaPlano | None) -> bool:
 
 
 def _mesmo_dia(a: DiaPlano, b: DiaPlano) -> bool:
-    return a.nome == b.nome and a.exercicios == b.exercicios and _mesma_corrida(a.corrida, b.corrida)
+    return (
+        a.nome == b.nome
+        and a.exercicios == b.exercicios
+        and _mesma_corrida(a.corrida, b.corrida)
+        and a.cardio == b.cardio
+    )
 
 
 def _dia(antes: DiaPlano, depois: DiaPlano) -> list[str]:
@@ -101,6 +119,8 @@ def _dia(antes: DiaPlano, depois: DiaPlano) -> list[str]:
         linhas += [f"{prefixo} entra {_nome(d.exercicio_id)} ({_prescricao(d)})" for d in entrou]
     if not _mesma_corrida(antes.corrida, depois.corrida):
         linhas.append(f"{prefixo} {_corrida(antes.corrida)} → {_corrida(depois.corrida)}")
+    if antes.cardio != depois.cardio:
+        linhas.append(f"{prefixo} {cardio_legivel(antes.cardio)} → {cardio_legivel(depois.cardio)}")
     return linhas
 
 

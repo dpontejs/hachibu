@@ -24,8 +24,7 @@ class CorridaPlano(BaseModel):
     model_config = ConfigDict(extra="forbid")
     # True: o treino vem da semana atual da progressão de iniciante (o plano guarda só a marcação).
     progressao: bool = False
-    # recuperacao: caminhada leve ou mobilidade (esforço 1–3); conta como dia sem treino pesado.
-    tipo: Literal["corrida_caminhada", "leve", "intervalado", "longao", "recuperacao"]
+    tipo: Literal["corrida_caminhada", "leve", "intervalado", "longao"]
     duracao_min: int = Field(ge=5, le=240)
     corre_min: float | None = Field(default=None, ge=0, le=240)
     anda_min: float | None = Field(default=None, ge=0, le=30)
@@ -43,12 +42,22 @@ class CorridaPlano(BaseModel):
         return self
 
 
+class CardioPlano(BaseModel):
+    """Cardio que não é corrida (bicicleta, elíptico, caminhada…). Leve não conta como treino pesado."""
+
+    model_config = ConfigDict(extra="forbid")
+    modalidade: Literal["bicicleta", "eliptico", "caminhada", "escada", "remo"]
+    duracao_min: int = Field(ge=5, le=120)
+    intensidade: Literal["leve", "moderada"]
+
+
 class DiaPlano(BaseModel):
     model_config = ConfigDict(extra="forbid")
     dia: int = Field(ge=0, le=6)  # 0 = segunda
     nome: str = Field(max_length=40)
     exercicios: list[ExercicioPlano] = Field(default_factory=list, max_length=15)
     corrida: CorridaPlano | None = None
+    cardio: CardioPlano | None = None
 
 
 class PlanoIn(BaseModel):

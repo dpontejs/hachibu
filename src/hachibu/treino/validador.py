@@ -7,7 +7,7 @@ from collections import Counter
 
 from hachibu.metas import PerfilIn
 from hachibu.treino.exercicios import PERNAS, por_id
-from hachibu.treino.modelos import CorridaPlano, DiaPlano, PlanoIn
+from hachibu.treino.modelos import CardioPlano, CorridaPlano, DiaPlano, PlanoIn
 from hachibu.treino.progressao import corrida_da_semana
 
 SEGUNDOS_POR_SERIE = 40
@@ -44,19 +44,21 @@ def perna_pesada(dia: DiaPlano) -> bool:
 
 
 def volume_corrida(plano: PlanoIn, semana_corrida: int) -> int:
-    """Minutos de corrida na semana (a recuperação é caminhada e não entra)."""
-    return sum(
-        c.duracao_min
-        for d in plano.dias
-        if (c := corrida_efetiva(d.corrida, semana_corrida)) and c.tipo != "recuperacao"
-    )
+    """Minutos de corrida na semana (o cardio, que não é corrida, não entra)."""
+    return sum(c.duracao_min for d in plano.dias if (c := corrida_efetiva(d.corrida, semana_corrida)))
+
+
+def cardio_leve(c: CardioPlano | None) -> bool:
+    return c is not None and c.intensidade == "leve"
 
 
 def sem_treino_pesado(dia: DiaPlano) -> bool:
-    return not dia.exercicios and (dia.corrida is None or dia.corrida.tipo == "recuperacao")
+    """Descanso ou só cardio leve (bicicleta, caminhada…): não conta como dia de treino."""
+    return not dia.exercicios and dia.corrida is None and (dia.cardio is None or cardio_leve(dia.cardio))
 
 
-MAX_RECUPERACAO_MIN = 40
+# Sem minutos_cardio no perfil, o teto de uma sessão de cardio.
+TETO_CARDIO_MIN = 60
 # Sem minutos_corrida no perfil, o teto de uma sessão de corrida vem do nível.
 TETO_CORRIDA_NIVEL = {"intermediario": 60, "avancado": 120}
 
@@ -94,11 +96,18 @@ def validar_plano(
                 f"acima dos {perfil.minutos_sessao} min por sessão."
             )
         corrida = corrida_efetiva(dia.corrida, semana_corrida)
-        if corrida and corrida.tipo == "recuperacao":
-            # Caminhada ou mobilidade: só o limite próprio, não o tempo de corrida.
-            if corrida.duracao_min > MAX_RECUPERACAO_MIN:
-                erros.append(f"{DIAS[dia.dia]}: recuperação de no máximo {MAX_RECUPERACAO_MIN} min.")
-        elif (
+        if dia.cardio:
+            teto = perfil.minutos_cardio * TOLERANCIA_DURACAO if perfil.minutos_cardio else TETO_CARDIO_MIN
+            if dia.cardio.duracao_min > teto:
+                erros.append(
+                    f"{DIAS[dia.dia]}: cardio de {dia.cardio.duracao_min} min, acima de "
+                    + (
+                        f"{perfil.minutos_cardio} min de cardio por dia."
+                        if perfil.minutos_cardio
+                        else f"{teto} min."
+                    )
+                )
+        if (
             corrida
             and perfil.minutos_corrida
             and corrida.duracao_min > perfil.minutos_corrida * TOLERANCIA_DURACAO
@@ -111,7 +120,7 @@ def validar_plano(
     nivel_corrida = perfil.nivel_corrida or "iniciante"
     for dia in plano.dias:
         c = dia.corrida
-        if not c or c.tipo == "recuperacao":
+        if not c:
             continue
         if nivel_corrida == "iniciante" and not c.progressao:
             erros.append(
@@ -130,6 +139,8 @@ def validar_plano(
         anterior_dia = plano.dias[(dia.dia - 1) % 7]
         if corrida and corrida.tipo in ("intervalado", "longao") and perna_pesada(anterior_dia):
             erros.append(f"{DIAS[dia.dia]}: {corrida.tipo} no dia seguinte a um treino pesado de perna.")
+        if dia.cardio and dia.cardio.intensidade == "moderada" and perna_pesada(anterior_dia):
+            erros.append(f"{DIAS[dia.dia]}: cardio moderado no dia seguinte a um treino pesado de perna.")
     # 8. intervalado e longão (os treinos duros de corrida) nunca em dias seguidos
     duros = [
         (c := corrida_efetiva(d.corrida, semana_corrida)) is not None and c.tipo in ("intervalado", "longao")

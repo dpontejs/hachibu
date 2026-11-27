@@ -12,6 +12,7 @@ MIGRACOES = [
     "005_memorias.sql",
     "006_treino.sql",
     "007_minutos_corrida.sql",
+    "008_minutos_cardio.sql",
 ]
 
 CONVITE = "convite-teste"
