@@ -103,6 +103,22 @@ export default function BoasVindas() {
         </div>
       </section>
 
+      <section className="landing__secao landing__nomeacao">
+        <h2 className="rotulo px">DE ONDE VEM O NOME</h2>
+        <p className="landing__kanji" lang="ja">
+          腹八分
+        </p>
+        <p>
+          Em Okinawa existe um costume antigo: comer até a barriga estar oito partes cheia, de dez.{" "}
+          <em>Hara hachi bu</em> quer dizer exatamente isso. É uma ideia de equilíbrio, não de restrição: parar
+          um pouco antes, todo dia, sem sofrer.
+        </p>
+        <p>
+          E o <em>hachi</em> (<span className="landing__kanji-texto" lang="ja">八</span>) é o número 8. Daí a cara de videogame de 8 e 16 bits. Um dia de cada vez, um
+          pixel de cada vez.
+        </p>
+      </section>
+
       <section className="landing__secao">
         <h2 className="rotulo px">COMO FUNCIONA</h2>
         <ol className="landing__passos">
@@ -170,22 +186,6 @@ export default function BoasVindas() {
             </li>
           </ul>
         </div>
-      </section>
-
-      <section className="landing__secao landing__nomeacao">
-        <h2 className="rotulo px">DE ONDE VEM O NOME</h2>
-        <p className="landing__kanji" lang="ja">
-          腹八分
-        </p>
-        <p>
-          Em Okinawa existe um costume antigo: comer até a barriga estar oito partes cheia, de dez.{" "}
-          <em>Hara hachi bu</em> quer dizer exatamente isso. É uma ideia de equilíbrio, não de restrição: parar
-          um pouco antes, todo dia, sem sofrer.
-        </p>
-        <p>
-          E o <em>hachi</em> (<span className="landing__kanji-texto" lang="ja">八</span>) é o número 8. Daí a cara de videogame de 8 e 16 bits. Um dia de cada vez, um
-          pixel de cada vez.
-        </p>
       </section>
 
       <section className="landing__secao landing__final">

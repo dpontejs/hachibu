@@ -46,12 +46,12 @@ describe("BoasVindas: conteúdo", () => {
     );
     const secoes = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
     expect(secoes).toEqual([
+      "DE ONDE VEM O NOME",
       "COMO FUNCIONA",
       "O QUE ELE FAZ",
       "EM BREVE",
       "NO SEU CELULAR",
       "SEUS DADOS",
-      "DE ONDE VEM O NOME",
       "PRONTO PARA COMECAR?",
     ]);
     expect(screen.getByText(/Adicionar à Tela de Início/)).toBeInTheDocument();
