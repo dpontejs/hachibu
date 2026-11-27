@@ -70,12 +70,12 @@ def validar_plano(
         erros.append(
             f"o plano usa {len(treino)} dias, mas o aluno tem {perfil.dias_semana} dias disponíveis."
         )
-    # 3. duração de cada dia (musculação + corrida no mesmo dia)
+    # 3. duração de cada dia (musculação + corrida do mesmo dia, ou só a corrida)
     limite = perfil.minutos_sessao * TOLERANCIA_DURACAO
     for dia in plano.dias:
         corrida = corrida_efetiva(dia.corrida, semana_corrida)
-        total = minutos_musculacao(dia) + (corrida.duracao_min if corrida and dia.exercicios else 0)
-        if dia.exercicios and total > limite:
+        total = minutos_musculacao(dia) + (corrida.duracao_min if corrida else 0)
+        if total > limite:
             erros.append(
                 f"{DIAS[dia.dia]}: cerca de {total:.0f} min, "
                 f"acima dos {perfil.minutos_sessao} min por sessão."
@@ -86,6 +86,19 @@ def validar_plano(
         anterior_dia = plano.dias[(dia.dia - 1) % 7]
         if corrida and corrida.tipo in ("intervalado", "longao") and perna_pesada(anterior_dia):
             erros.append(f"{DIAS[dia.dia]}: {corrida.tipo} no dia seguinte a um treino pesado de perna.")
+    # 8. intervalado e longão (os treinos duros de corrida) nunca em dias seguidos
+    duros = [
+        (c := corrida_efetiva(d.corrida, semana_corrida)) is not None and c.tipo in ("intervalado", "longao")
+        for d in plano.dias
+    ]
+    for i in range(7):
+        if duros[i] and duros[(i + 1) % 7]:
+            erros.append(f"{DIAS[i]} e {DIAS[(i + 1) % 7]}: dois treinos duros de corrida em dias seguidos.")
+    # 9. o mesmo exercício duas vezes no mesmo dia
+    for dia in plano.dias:
+        ids = [e.exercicio_id for e in dia.exercicios]
+        for repetido in sorted({i for i in ids if ids.count(i) > 1}):
+            erros.append(f"{DIAS[dia.dia]}: '{repetido}' repetido no mesmo dia.")
     # 5. volume de corrida sobe no máximo 10% sobre a versão anterior
     volume = volume_corrida(plano, semana_corrida)
     if anterior is not None:

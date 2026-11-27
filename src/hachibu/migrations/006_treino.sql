@@ -9,9 +9,10 @@ CREATE TABLE planos (
     dados TEXT NOT NULL,
     criado_em TEXT NOT NULL,
     ativo INTEGER NOT NULL DEFAULT 1,
+    notas TEXT NOT NULL DEFAULT '[]',
     UNIQUE (user_id, versao)
 );
-CREATE INDEX planos_ativo ON planos(user_id, ativo);
+CREATE UNIQUE INDEX planos_um_ativo ON planos(user_id) WHERE ativo = 1;
 CREATE TABLE progressao_corrida (
     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     semana INTEGER NOT NULL DEFAULT 1,

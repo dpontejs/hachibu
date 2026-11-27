@@ -5,7 +5,7 @@ import itertools
 import pytest
 
 from hachibu.metas import PerfilIn
-from hachibu.treino.base import plano_base
+from hachibu.treino.base import gerar_plano_base, plano_base
 from hachibu.treino.exercicios import CATALOGO, PERNAS, buscar, por_id
 from hachibu.treino.modelos import CorridaPlano, DiaPlano, ExercicioPlano, PlanoIn
 from hachibu.treino.progressao import PROGRESSAO_INICIANTE, corrida_da_semana
@@ -46,7 +46,7 @@ def test_progressao_comeca_alternando_e_termina_continua():
     s1, s9 = corrida_da_semana(1), corrida_da_semana(9)
     assert (s1.corre_min, s1.anda_min, s1.repeticoes) == (1, 2, 7)
     assert s1.duracao_min == 5 + 7 * 3  # aquecimento + blocos
-    assert (s9.corre_min, s9.anda_min, s9.repeticoes) == (30, 0, 1)
+    assert (s9.corre_min, s9.anda_min, s9.repeticoes) == (25, 0, 1)
     assert all(corrida_da_semana(n).tipo == "corrida_caminhada" for n in range(1, 10))
 
 
@@ -119,7 +119,7 @@ def test_corredor_intermediario_tem_leves_e_longao():
             ["academia", "casa_halteres", "peso_corporal"],
             ["iniciante", "intermediario", "avancado"],
             ["automatico", "mesmo_dia", "dias_separados"],
-            [45, 60, 90],
+            [15, 20, 30, 45, 60, 90],
             [None, "intermediario", "avancado"],
         )
     ),
@@ -133,8 +133,12 @@ def test_todo_perfil_razoavel_gera_plano_valido(dias, equipamento, nivel, quando
         minutos_sessao=minutos,
         nivel_corrida=nivel_corrida,
     )
+    plano, _ = gerar_plano_base(p)
     for semana in (1, 9):
-        assert validar_plano(plano_base(p), p, semana_corrida=semana) == []
+        assert validar_plano(plano, p, semana_corrida=semana) == []
+    for dia in plano.dias:
+        ids = [e.exercicio_id for e in dia.exercicios]
+        assert len(ids) == len(set(ids)), dia.nome
 
 
 # ---------- validador ----------
@@ -223,3 +227,65 @@ def test_validador_longao_grande_demais():
 def test_plano_precisa_de_7_dias_distintos():
     with pytest.raises(ValueError):
         PlanoIn(dias=[DiaPlano(dia=0, nome="A")] * 7)
+
+
+# ---------- achados da revisão ----------
+
+
+def test_progressao_sem_saltos_grandes():
+    corridos = [c * r for c, a, r in PROGRESSAO_INICIANTE]
+    assert all(b <= a * 1.5 for a, b in zip(corridos, corridos[1:], strict=False)), corridos
+
+
+def test_pouco_tempo_tira_a_corrida_e_avisa():
+    p = perfil(dias_semana=1, minutos_sessao=30)
+    plano, avisos = gerar_plano_base(p)
+    assert validar_plano(plano, p) == [] and validar_plano(plano, p, semana_corrida=9) == []
+    assert any("corrida" in a for a in avisos)
+
+
+def test_dia_so_de_corrida_respeita_os_minutos():
+    assert any("min" in e for e in validar_plano(plano_de(corrida(1, minutos=60)), perfil(minutos_sessao=30)))
+
+
+def test_corridas_nao_comem_a_musculacao():
+    for p in (
+        perfil(dias_semana=4, corrida_quando="dias_separados", corridas_semana=3),
+        perfil(dias_semana=7, corridas_semana=7),
+    ):
+        plano, avisos = gerar_plano_base(p)
+        assert len([d for d in plano.dias if d.exercicios]) >= 2
+        assert any("corridas" in a for a in avisos)
+
+
+def test_preferencia_trocada_vira_aviso():
+    _, avisos = gerar_plano_base(perfil(dias_semana=4, minutos_sessao=30, corrida_quando="mesmo_dia"))
+    assert any("dias separados" in a for a in avisos)
+
+
+def test_treinos_duros_de_corrida_nao_ficam_em_dias_seguidos():
+    plano = plano_de(corrida(3, "intervalado", 30), corrida(4, "longao", 30), corrida(0, minutos=30))
+    assert any("seguidos" in e for e in validar_plano(plano, perfil()))
+
+
+def test_iniciante_em_casa_sem_exercicios_dificeis_demais():
+    plano = plano_base(perfil(nivel="iniciante", equipamento="peso_corporal", dias_semana=4))
+    ids = {e.exercicio_id for d in plano.dias for e in d.exercicios}
+    assert not ids & {"barra_fixa", "flexao_nordica"}
+
+
+def test_cinco_dias_sem_perna_pesada_em_dias_seguidos():
+    from hachibu.treino.validador import perna_pesada
+
+    plano = plano_base(perfil(dias_semana=5, corridas_semana=1))
+    pesados = [perna_pesada(d) for d in plano.dias]
+    assert not any(a and b for a, b in zip(pesados, pesados[1:] + pesados[:1], strict=True))
+
+
+def test_validador_exercicio_repetido_no_mesmo_dia():
+    dia = DiaPlano(
+        dia=0,
+        nome="X",
+        exercicios=[ExercicioPlano(exercicio_id="supino_reto", series=3, reps_min=8, reps_max=10)] * 2,
+    )
+    assert any("repetido" in e for e in validar_plano(plano_de(dia), perfil()))

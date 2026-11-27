@@ -100,3 +100,35 @@ def test_buscar_exercicios(aluno):
 def test_rotas_de_treino_exigem_login(client):
     assert client.get("/api/plano").status_code == 401
     assert client.post("/api/plano/base").status_code == 401
+
+
+def test_gerar_devolve_os_avisos_e_eles_ficam_no_plano(aluno):
+    aluno.put(
+        "/api/perfil",
+        json=BASE | {"dias_semana": 4, "corrida_quando": "dias_separados", "corridas_semana": 3},
+    )
+    r = aluno.post("/api/plano/base")
+    assert r.status_code == 201 and any("corridas" in a for a in r.json()["notas"])
+    assert plano(aluno).json()["notas"] == r.json()["notas"]
+
+
+def test_dois_pedidos_ao_mesmo_tempo_criam_um_plano_so(aluno):
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(4) as pool:
+        codigos = sorted(pool.map(lambda _: aluno.post("/api/plano/base").status_code, range(4)))
+    assert codigos == [201, 409, 409, 409]
+    assert plano(aluno).json()["versao"] == 1
+
+
+def test_banco_garante_um_plano_ativo_por_usuario(settings, aluno):
+    import sqlite3
+
+    import pytest
+
+    aluno.post("/api/plano/base")
+    with sqlite3.connect(settings.db_path) as conn, pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO planos (user_id, versao, origem, dados, criado_em, ativo) "
+            "VALUES (1, 9, 'base', '{}', 'x', 1)"
+        )

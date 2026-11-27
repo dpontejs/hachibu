@@ -1,7 +1,7 @@
 """Progressão de corrida e caminhada para quem está começando (tabela própria, por tempo e esforço).
 
-Cada sessão tem 5 min de caminhada de aquecimento e blocos de corrida e caminhada. Os blocos de corrida
-crescem até 30 min contínuos na semana 9.
+Cada sessão tem 5 min de caminhada de aquecimento e blocos de corrida e caminhada. O tempo correndo sobe no
+máximo 50% de uma semana para a outra, até 25 min contínuos na semana 9 (depois vêm as corridas leves).
 """
 
 from hachibu.treino.modelos import CorridaPlano
@@ -10,14 +10,14 @@ AQUECIMENTO_MIN = 5
 # (corre_min, anda_min, repetições)
 PROGRESSAO_INICIANTE: list[tuple[float, float, int]] = [
     (1, 2, 7),
+    (1.5, 2, 7),
     (2, 2, 6),
     (3, 2, 5),
     (5, 2, 4),
-    (8, 2, 3),
-    (12, 2, 2),
-    (18, 0, 1),
-    (24, 0, 1),
-    (30, 0, 1),
+    (7, 2, 3),
+    (10, 1, 2),
+    (20, 0, 1),
+    (25, 0, 1),
 ]
 DURACAO_MAXIMA = max(AQUECIMENTO_MIN + (c + a) * r for c, a, r in PROGRESSAO_INICIANTE)
 
