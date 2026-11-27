@@ -168,3 +168,83 @@ def test_stream_com_aprovacao_pendente_manda_erro_409(app, aluno):
 def test_validacao_continua_antes_do_stream(app, aluno):
     app.state.modelo_coach = roteiro("Oi!")
     assert enviar_stream(aluno, "oi", thread_id="xyz").status_code == 422
+
+
+def test_segunda_mensagem_na_conversa_em_andamento_409(app, aluno):
+    respostas: dict = {}
+
+    class Lento:
+        def bind_tools(self, *a, **k):
+            return self
+
+        def invoke(self, *a, **k):
+            from langchain_core.messages import AIMessage
+
+            if "segunda" not in respostas:
+                respostas["segunda"] = enviar(aluno, "de novo", thread_id=ID)
+                respostas["decisao"] = aluno.post(f"/api/coach/{ID}/decisao", json={"aprovar": True})
+            return AIMessage(content="Pronto.")
+
+    app.state.modelo_coach = Lento()
+    assert enviar(aluno, "oi", thread_id=ID).status_code == 200
+    assert (respostas["segunda"].status_code, respostas["segunda"].json()["detail"]) == (409, "em_andamento")
+    assert respostas["decisao"].status_code == 409
+    # A primeira terminou normalmente: a conversa tem dono e uma resposta só.
+    assert [m["texto"] for m in aluno.get(f"/api/coach/{ID}").json()["mensagens"]] == ["oi", "Pronto."]
+
+
+def test_id_novo_que_ja_existe_no_historico_salvo_404(app, settings, aluno, make_user):
+    from hachibu.coach.agente import responder
+
+    # Conversa que ficou só no checkpointer (ex.: conta apagada): o id não pode ser reaproveitado.
+    responder(settings, roteiro("dado de saúde da conta antiga"), 1, ID, mensagem="segredo")
+    intruso = make_user("b@x.com")
+    intruso.put("/api/perfil", json=BASE)
+    app.state.modelo_coach = roteiro("Oi!")
+    r = enviar(intruso, "oi", thread_id=ID)
+    assert r.status_code == 404
+    assert "dado de saúde" not in r.text
+
+
+def test_falha_em_conversa_nova_apaga_tambem_o_historico_salvo(app, settings, aluno):
+    from hachibu.coach.agente import _checkpointer
+
+    class Quebrado:
+        def bind_tools(self, *a, **k):
+            return self
+
+        def invoke(self, *a, **k):
+            raise RuntimeError("fora do ar")
+
+    app.state.modelo_coach = Quebrado()
+    assert enviar(aluno, "segredo de saúde", thread_id=ID).status_code == 503
+    assert _checkpointer(settings).get({"configurable": {"thread_id": ID}}) is None
+
+
+def test_stream_ja_registra_a_conversa_antes_do_primeiro_evento(app, aluno):
+    visto: dict = {}
+
+    class Espiao:
+        def bind_tools(self, *a, **k):
+            return self
+
+        def invoke(self, *a, **k):
+            from langchain_core.messages import AIMessage
+
+            visto["lista"] = [c["thread_id"] for c in aluno.get("/api/coach/conversas").json()["conversas"]]
+            return AIMessage(content="Pronto.")
+
+    app.state.modelo_coach = Espiao()
+    assert eventos(enviar_stream(aluno, "oi", thread_id=ID).text)[-1][0] == "fim"
+    assert visto["lista"] == [ID]
+
+
+def test_cota_estourada_nao_deixa_conversa_reservada(app, settings, aluno):
+    from dataclasses import replace
+
+    app.state.settings = replace(settings, coach_limite_diario=1)
+    app.state.modelo_coach = roteiro("Oi!", "Oi!")
+    assert enviar(aluno, "primeira").status_code == 200
+    assert enviar(aluno, "oi", thread_id=ID).status_code == 429
+    app.state.settings = settings
+    assert enviar(aluno, "oi", thread_id=ID).status_code == 200
