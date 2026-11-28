@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { api, mensagemDeErro, type CardioDia, type CorridaDia, type DiaTreino, type PlanoTreino } from "../api";
+import {
+  api,
+  mensagemDeErro,
+  type CardioDia,
+  type CorridaDia,
+  type DiaTreino,
+  type PlanoTreino,
+  type SessaoFeita,
+  type SessaoTreino,
+} from "../api";
 import { abrirCoachCom, EVENTO_PLANO } from "../coach/abrir";
 
 const PEDIDO_MONTAR = "Quero montar meu plano de treino e corrida.";
@@ -11,6 +20,18 @@ const SEMANAS_PROGRESSAO = 9;
 
 /** 0 = segunda, pelo relógio do aparelho (o fuso de quem treina). */
 const diaDeHoje = () => (new Date().getDay() + 6) % 7;
+
+const isoLocal = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/** Segunda e domingo desta semana, em datas locais. */
+function semanaAtual(): [string, string] {
+  const seg = new Date();
+  seg.setDate(seg.getDate() - diaDeHoje());
+  const dom = new Date(seg);
+  dom.setDate(seg.getDate() + 6);
+  return [isoLocal(seg), isoLocal(dom)];
+}
 
 const minutos = (n: number) => `${String(n).replace(".", ",")} min`;
 
@@ -89,6 +110,96 @@ export default function Treino() {
   const navegar = useNavigate();
   const pedir = (texto: string) => abrirCoachCom(texto, navegar);
   const [apagando, setApagando] = useState(false);
+  const [aberta, setAberta] = useState<SessaoTreino | null>(null);
+  const [feitas, setFeitas] = useState<SessaoFeita[]>([]);
+  const [iniciando, setIniciando] = useState(false);
+
+  // Sessão em andamento e treinos feitos na semana: opcionais (se falhar, a semana aparece sem as marcas).
+  const carregarSessoes = useCallback(() => {
+    const [de, ate] = semanaAtual();
+    api.sessaoAberta().then(setAberta).catch(() => {});
+    api.sessoesFeitas(de, ate).then(setFeitas).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    carregarSessoes();
+    // PWA aberto de um dia (ou semana) para o outro: as marcas acompanham.
+    const atualizar = () => document.visibilityState === "visible" && carregarSessoes();
+    document.addEventListener("visibilitychange", atualizar);
+    return () => document.removeEventListener("visibilitychange", atualizar);
+  }, [carregarSessoes]);
+
+  async function resolverAberta(fazer: "finalizar" | "descartar") {
+    if (!aberta) return;
+    if (fazer === "descartar" && !window.confirm("Descartar o treino aberto? As séries marcadas serão apagadas."))
+      return;
+    setErro(null);
+    try {
+      await (fazer === "finalizar" ? api.finalizarSessao(aberta.id) : api.descartarSessao(aberta.id));
+      setAberta(null);
+      carregarSessoes();
+    } catch (e) {
+      setErro(mensagemDeErro(e));
+    }
+  }
+
+  /** Feito nesta semana, com pelo menos uma série (sessão vazia não conta). */
+  const feitoNoDia = (dia: number, data?: string) =>
+    feitas.some((f) => f.plano_dia === dia && f.series > 0 && (data === undefined || f.data === data));
+
+  const hojeIso = isoLocal(new Date());
+  const abertaVelha = aberta !== null && aberta.data !== hojeIso;
+  const blocoSessao = (temTreinoHoje: boolean) => (
+    <div className="treino__iniciar">
+      {aberta && abertaVelha ? (
+        <div className="treino__aberta">
+          <p>
+            Você tem um treino aberto de {aberta.data.slice(8, 10)}/{aberta.data.slice(5, 7)} ({aberta.nome}).
+          </p>
+          <button type="button" className="botao" onClick={() => void resolverAberta("finalizar")}>
+            FINALIZAR ESSE
+          </button>
+          <button type="button" className="treino__livre" onClick={() => navegar(`/treino/sessao/${aberta.id}`)}>
+            continuar
+          </button>
+          <button type="button" className="treino__livre" onClick={() => void resolverAberta("descartar")}>
+            descartar
+          </button>
+        </div>
+      ) : aberta ? (
+        <>
+          <button type="button" className="botao" onClick={() => navegar(`/treino/sessao/${aberta.id}`)}>
+            CONTINUAR TREINO
+          </button>
+          <span className="mudo">em andamento: {aberta.nome}</span>
+        </>
+      ) : (
+        temTreinoHoje && (
+          <button type="button" className="botao" onClick={() => void iniciar(hojeIdx)} disabled={iniciando}>
+            INICIAR TREINO
+          </button>
+        )
+      )}
+      {!aberta && (
+        <button type="button" className="treino__livre" onClick={() => void iniciar()} disabled={iniciando}>
+          treino livre
+        </button>
+      )}
+    </div>
+  );
+
+  async function iniciar(planoDia?: number) {
+    setIniciando(true);
+    setErro(null);
+    try {
+      const s = await api.iniciarSessao(planoDia === undefined ? {} : { plano_dia: planoDia });
+      navegar(`/treino/sessao/${s.id}`);
+    } catch (e) {
+      setErro(mensagemDeErro(e));
+    } finally {
+      setIniciando(false);
+    }
+  }
 
   async function recomecar() {
     if (!window.confirm("Apagar o plano atual e montar outro com o coach? O atual fica guardado no histórico."))
@@ -153,6 +264,7 @@ export default function Treino() {
             MONTAR COM O COACH
           </button>
         </section>
+        {blocoSessao(false)}
         {erro && (
           <p className="aviso" role="alert">
             {erro}
@@ -216,9 +328,13 @@ export default function Treino() {
         {!hoje.exercicios.length && !hoje.corrida && !hoje.cardio && (
           <p className="mudo">Dia de descanso. Recuperar também é treino.</p>
         )}
+        {feitoNoDia(hojeIdx, hojeIso) && (
+          <p className="treino__feito px">✓ FEITO</p>
+        )}
         <Exercicios d={hoje} />
         {hoje.corrida && <Corrida c={hoje.corrida} />}
         {hoje.cardio && <Cardio c={hoje.cardio} />}
+        {blocoSessao(hoje.exercicios.length > 0)}
       </section>
 
       <section aria-labelledby="treino-semana">
@@ -235,7 +351,10 @@ export default function Treino() {
               <details>
                 <summary>
                   <span className="px">{DIAS[d.dia]}</span>
-                  <span className="treino__dia-nome">{d.nome}</span>
+                  <span className="treino__dia-nome">
+                    {d.nome}
+                    {feitoNoDia(d.dia) && <span className="treino__ok"> ✓</span>}
+                  </span>
                   {resumo(d) && <span className="mudo">{resumo(d)}</span>}
                 </summary>
                 <Exercicios d={d} />

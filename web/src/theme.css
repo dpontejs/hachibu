@@ -2555,3 +2555,213 @@ input[type="number"] {
   color: var(--prot);
   border-color: var(--prot);
 }
+
+/* ---------- registro da musculação ---------- */
+.treino__iniciar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.treino__livre,
+.sessao__link {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 4px 0;
+  font: inherit;
+  font-size: 14px;
+  color: var(--mudo);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.treino__feito {
+  margin: 0;
+  font-size: 9px;
+  color: var(--acento);
+}
+.treino__ok {
+  color: var(--acento);
+}
+.sessao {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 720px;
+  padding-bottom: 96px;
+}
+.sessao__topo {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+.sessao__topo h1 {
+  margin: 4px 0 0;
+  font-size: 22px;
+}
+.sessao__tempo {
+  font-size: 28px;
+  color: var(--acento);
+}
+.sessao__local {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+.sessao input {
+  background: var(--bg);
+  border: 1px solid var(--trilho);
+  border-radius: var(--raio-p);
+  padding: 9px 10px;
+  font-size: 16px; /* evita o zoom do iOS */
+  outline: none;
+}
+.sessao input:focus {
+  border-color: var(--acento);
+}
+.sessao__exercicio {
+  background: var(--card);
+  border: 1px solid var(--trilho);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sessao__exercicio header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.sessao__exercicio h2 {
+  margin: 0;
+  font-size: 17px;
+}
+.sessao__meta {
+  margin: 0;
+  font-size: 13px;
+}
+.sessao__series {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sessao__serie {
+  display: grid;
+  grid-template-columns: 24px 1fr 1fr 44px;
+  align-items: center;
+  gap: 8px;
+}
+.sessao__serie label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+.sessao__serie input {
+  width: 100%;
+  min-width: 0;
+}
+.sessao__serie--feita input {
+  color: var(--acento);
+  border-color: var(--acento-sombra);
+}
+.sessao__n {
+  font-size: 20px;
+  color: var(--mudo);
+}
+.sessao__check {
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid var(--trilho);
+  background: var(--bg);
+  color: var(--mudo);
+  font-size: 18px;
+  cursor: pointer;
+}
+.sessao__check--on {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: #0b0c10;
+}
+.sessao__busca {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sessao__busca ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sessao__busca li button {
+  width: 100%;
+  text-align: left;
+  background: var(--bg);
+  border: 1px solid var(--trilho);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.sessao__descanso {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 88px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--card);
+  border: 1px solid var(--acento-sombra);
+  border-radius: 999px;
+  padding: 8px 16px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+}
+.sessao__descanso .vt {
+  font-size: 24px;
+  color: var(--acento);
+}
+.sessao__acoes {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.sessao__resumo {
+  background: var(--card);
+  border: 1px solid var(--acento-sombra);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+.sessao__resumo-num {
+  font-size: 48px;
+  color: var(--acento);
+  margin: 0;
+}
+.treino__aberta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.treino__aberta p {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 14px;
+}
